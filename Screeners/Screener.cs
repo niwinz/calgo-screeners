@@ -5,81 +5,134 @@ using System.Web.Script.Serialization;
 using cAlgo.API;
 using cAlgo.API.Internals;
 using cAlgo.API.Indicators;
+using System.ComponentModel;
+using System.Drawing;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace cAlgo {
+
+    public class Form1 : Form {
+        public Button button1;
+        public TextBox textBox1;
+        public Form1() {
+            button1 = new Button();
+            button1.Size = new Size(40, 40);
+            button1.Location = new Point(30, 30);
+            button1.Text = "Click me";
+            this.Controls.Add(button1);
+            button1.Click += new EventHandler(button1_Click);
+
+
+            this.textBox1 = new System.Windows.Forms.TextBox();
+            this.SuspendLayout();
+            // 
+            // textBox1
+            // 
+            this.textBox1.AcceptsReturn = true;
+            this.textBox1.AcceptsTab = true;
+            this.textBox1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.textBox1.Multiline = true;
+            this.textBox1.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            // 
+            // Form1
+            // 
+            this.ClientSize = new System.Drawing.Size(284, 264);
+            this.Controls.Add(this.textBox1);
+
+
+        }
+        private void button1_Click(object sender, EventArgs e) {
+            MessageBox.Show("Hello World");
+        }
+
+        //[STAThread]
+        //static void Main() {
+        //    Application.EnableVisualStyles();
+        //    Application.Run(new Form1());
+        //}
+    }
+
     [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.FullAccess)]
     public class Screener : Robot {
 
         [Parameter("Source")]
         public DataSeries Source { get; set; }
 
-        private Dictionary<String, Dictionary<TimeFrame, MarketSeries>> series;
+        private Dictionary<String, MarketSeries> lseries;
+        private Dictionary<String, MarketSeries> rseries;
+
         private Dictionary<String, Symbol> symbols;
 
         private String[] pairs = new String[] {
             "EURUSD",
             "GBPUSD",
-            "EURJPY",
-            "USDJPY",
-            "AUDUSD",
-            "USDCHF",
-            "GBPJPY",
-            "USDCAD",
-            "EURGBP",
-            "EURCHF",
-            "AUDJPY",
-            "NZDUSD",
-            "CHFJPY",
-            "EURAUD",
-            "CADJPY",
-            "GBPAUD",
-            "EURCAD",
-            "AUDCAD",
-            "GBPCHF",
-            "AUDCHF",
-            "GBPCAD",
-            "GBPNZD",
-            "NZDCAD",
-            "NZDCHF",
-            "NZDJPY",
-            "AUDNZD",
-            "CADCHF",
-            "EURNZD"
+            //"EURJPY",
+            //"USDJPY",
+            //"AUDUSD",
+            //"USDCHF",
+            //"GBPJPY",
+            //"USDCAD",
+            //"EURGBP",
+            //"EURCHF",
+            //"AUDJPY",
+            //"NZDUSD",
+            //"CHFJPY",
+            //"EURAUD",
+            //"CADJPY",
+            //"GBPAUD",
+            //"EURCAD",
+            //"AUDCAD",
+            //"GBPCHF",
+            //"AUDCHF",
+            //"GBPCAD",
+            //"GBPNZD",
+            //"NZDCAD",
+            //"NZDCHF",
+            //"NZDJPY",
+            //"AUDNZD",
+            //"CADCHF",
+            //"EURNZD"
         };
-        //private String[] pairs = new String[] { "EURUSD" };
-        private TimeFrame[] timeFrames = new TimeFrame[]
-        {
-            TimeFrame.Daily,
-            TimeFrame.Hour,
-            //TimeFrame.Minute5
-        };
+        //private String[] pairs = new String[] { "EURUSD", "USDJPY" };
 
-        private Dictionary<String, Dictionary<TimeFrame, ExponentialMovingAverage>> mm8;
-        private Dictionary<String, Dictionary<TimeFrame, WeightedMovingAverage>> mm50;
-        private Dictionary<String, Dictionary<TimeFrame, WeightedMovingAverage>> mm150;
-        private Dictionary<String, Dictionary<TimeFrame, WeightedMovingAverage>> mm300;
+        //private Dictionary<String, ExponentialMovingAverage> mm8;
+        //private Dictionary<String, WeightedMovingAverage> mm50;
+        private Dictionary<String, WeightedMovingAverage> lmm150;
+        private Dictionary<String, WeightedMovingAverage> lmm300;
+        private Dictionary<String, WeightedMovingAverage> rmm150;
+        private Dictionary<String, WeightedMovingAverage> rmm300;
 
-        private Dictionary<String, Dictionary<TimeFrame, StochasticOscillator>> sto;
-        private Dictionary<String, Dictionary<TimeFrame, MacdCrossOver>> macd;
+        //private Dictionary<String, StochasticOscillator> sto;
+        private Dictionary<String, MacdCrossOver> lmacd;
+        private Dictionary<String, MacdCrossOver> rmacd;
 
-        private Dictionary<String, Dictionary<TimeFrame, long?>> barCounters;
+        private Dictionary<String, long?> barCounters;
+        private long barCounter;
         private long ticks = 0;
+        private TimeFrame reftf;
+        private bool fistRun = true;
 
-        private ScreenerState state;
 
         protected override void OnStart() {
-            state = new ScreenerState();
-            barCounters = new Dictionary<string, Dictionary<TimeFrame, long?>>();
-            series = new Dictionary<string, Dictionary<TimeFrame, MarketSeries>>();
+            barCounters = new Dictionary<string, long?>();
+            barCounter = Source.Count;
+
+            lseries = new Dictionary<string, MarketSeries>();
+            rseries = new Dictionary<string, MarketSeries>();
+
             symbols = new Dictionary<string, Symbol>();
 
-            mm8 = new Dictionary<string, Dictionary<TimeFrame, ExponentialMovingAverage>>();
-            mm50 = new Dictionary<string, Dictionary<TimeFrame, WeightedMovingAverage>>();
-            mm150 = new Dictionary<string, Dictionary<TimeFrame, WeightedMovingAverage>>();
-            mm300 = new Dictionary<string, Dictionary<TimeFrame, WeightedMovingAverage>>();
+            //mm8 = new Dictionary<string, ExponentialMovingAverage>();
+            //mm50 = new Dictionary<string, WeightedMovingAverage>();
+            lmm150 = new Dictionary<string, WeightedMovingAverage>();
+            lmm300 = new Dictionary<string, WeightedMovingAverage>();
+            rmm150 = new Dictionary<string, WeightedMovingAverage>();
+            rmm300 = new Dictionary<string, WeightedMovingAverage>();
 
-            sto = new Dictionary<string, Dictionary<TimeFrame, StochasticOscillator>>();
-            macd = new Dictionary<string, Dictionary<TimeFrame, MacdCrossOver>>();
+            //sto = new Dictionary<string, StochasticOscillator>();
+            lmacd = new Dictionary<string, MacdCrossOver>();
+            rmacd = new Dictionary<string, MacdCrossOver>();
 
             Print("Initializing screener local state.");
 
@@ -87,176 +140,172 @@ namespace cAlgo {
                 symbols[sym] = MarketData.GetSymbol(sym);
             }
 
+            reftf = GetReferenceTimeframe(MarketSeries.TimeFrame);
+
             foreach (var sym in pairs) {
-                series[sym] = new Dictionary<TimeFrame, MarketSeries>();
-                mm8[sym] = new Dictionary<TimeFrame, ExponentialMovingAverage>();
-                mm50[sym] = new Dictionary<TimeFrame, WeightedMovingAverage>();
-                mm150[sym] = new Dictionary<TimeFrame, WeightedMovingAverage>();
-                mm300[sym] = new Dictionary<TimeFrame, WeightedMovingAverage>();
-                sto[sym] = new Dictionary<TimeFrame, StochasticOscillator>();
-                macd[sym] = new Dictionary<TimeFrame, MacdCrossOver>();
-                barCounters[sym] = new Dictionary<TimeFrame, long?>();
+                var lmks = MarketData.GetSeries(sym, MarketSeries.TimeFrame);
+                var rmks = MarketData.GetSeries(sym, reftf);
 
-                foreach (var tf in timeFrames) {
-                    var mks = MarketData.GetSeries(sym, tf);
-                    Print("Initializing data for: {0}/{1}.", sym, tf);
+                Print("Initializing data for: {0}/{1}.", sym, MarketSeries.TimeFrame);
 
-                    barCounters[sym][tf] = mks.Close.Count;
+                barCounters[sym] = lmks.Close.Count;
 
-                    mm8[sym][tf] = Indicators.ExponentialMovingAverage(mks.Close, 50);
-                    mm50[sym][tf] = Indicators.WeightedMovingAverage(mks.Close, 50);
-                    mm150[sym][tf] = Indicators.WeightedMovingAverage(mks.Close, 150);
-                    mm300[sym][tf] = Indicators.WeightedMovingAverage(mks.Close, 300);
+                //mm8[sym] = Indicators.ExponentialMovingAverage(mks.Close, 50);
+                //mm50[sym] = Indicators.WeightedMovingAverage(mks.Close, 50);
+                lmm150[sym] = Indicators.WeightedMovingAverage(lmks.Close, 150);
+                lmm300[sym] = Indicators.WeightedMovingAverage(lmks.Close, 300);
+                rmm150[sym] = Indicators.WeightedMovingAverage(rmks.Close, 150);
+                rmm300[sym] = Indicators.WeightedMovingAverage(rmks.Close, 300);
 
-                    sto[sym][tf] = Indicators.StochasticOscillator(mks, 14, 3, 3, MovingAverageType.Simple);
-                    macd[sym][tf] = Indicators.MacdCrossOver(mks.Close, 26, 12, 9);
+                //sto[sym] = Indicators.StochasticOscillator(mks, 14, 3, 3, MovingAverageType.Simple);
+                lmacd[sym] = Indicators.MacdCrossOver(lmks.Close, 26, 12, 9);
+                rmacd[sym] = Indicators.MacdCrossOver(rmks.Close, 26, 12, 9);
 
-                    series[sym][tf] = mks;
-                }
+                lseries[sym] = lmks;
+                rseries[sym] = rmks;
             }
+
+            //var thread = new Thread(() => {
+            //    Application.EnableVisualStyles();
+            //    Application.Run(new Form1());
+            //});
+
+            //thread.IsBackground = true;
+            //thread.Start();
 
             Print("Initialization finished.");
         }
 
         protected override void OnStop() {
             Print("Bot Stopped with total ticks: {0}", ticks);
-            Print("Local state generated: {0}", state.AsJSON());
-            File.WriteAllText("C:\\Users\\Andrey\\Desktop\\trading.json", state.AsJSON());
+
+        }
+
+        private bool IsNewBar() {
+            if (barCounter < Source.Count) {
+                barCounter = Source.Count;
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        // -------------------------------------------
+        // ----  Market Timing
+        // -------------------------------------------
+
+        private Tuple<int, int> CalculateMarketTiming(String sym) {
+            var local = CalculateLocalTiming(sym);
+            var reference = CalculateReferenceTiming(sym);
+
+            return new Tuple<int, int>(reference, local);
+        }
+
+        private bool IsTrendUp(MarketSeries series, WeightedMovingAverage wma) {
+            var close = series.Close.LastValue;
+            var value = wma.Result.LastValue;
+
+            if (value < close) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        private int CalculateLocalTiming(String sym) {
+            if (IsTrendUp(lseries[sym], lmm150[sym])) {
+                if (lmacd[sym].Histogram.LastValue > 0 && lmacd[sym].Signal.LastValue > 0) {
+                    return 1;
+                } else if (lmacd[sym].Histogram.LastValue > 0 && lmacd[sym].Signal.LastValue < 0) {
+                    return 4;
+                } else if (lmacd[sym].Histogram.LastValue <= 0 && lmacd[sym].Signal.LastValue >= 0) {
+                    return 2;
+                } else {
+                    return 3;
+                }
+            } else {
+                if (lmacd[sym].Histogram.LastValue < 0 && lmacd[sym].Signal.LastValue < 0) {
+                    return -1;
+                } else if (lmacd[sym].Histogram.LastValue < 0 && lmacd[sym].Signal.LastValue > 0) {
+                    return -4;
+                } else if (lmacd[sym].Histogram.LastValue >= 0 && lmacd[sym].Signal.LastValue <= 0) {
+                    return -2;
+                } else {
+                    return -3;
+                }
+            }
+        }
+
+        private int CalculateReferenceTiming(String sym) {
+            if (IsTrendUp(rseries[sym], rmm150[sym])) {
+                if (rmacd[sym].Histogram.LastValue > 0 && rmacd[sym].Signal.LastValue > 0) {
+                    return 1;
+                } else if (rmacd[sym].Histogram.LastValue > 0 && rmacd[sym].Signal.LastValue < 0) {
+                    return 4;
+                } else if (rmacd[sym].Histogram.LastValue <= 0 && rmacd[sym].Signal.LastValue >= 0) {
+                    return 2;
+                } else {
+                    return 3;
+                }
+            } else {
+                if (rmacd[sym].Histogram.LastValue < 0 && rmacd[sym].Signal.LastValue < 0) {
+                    return -1;
+                } else if (rmacd[sym].Histogram.LastValue < 0 && rmacd[sym].Signal.LastValue > 0) {
+                    return -4;
+                } else if (rmacd[sym].Histogram.LastValue >= 0 && rmacd[sym].Signal.LastValue <= 0) {
+                    return -2;
+                } else {
+                    return -3;
+                }
+            }
+        }
+
+        private TimeFrame GetReferenceTimeframe(TimeFrame tf) {
+            if (tf == TimeFrame.Hour) {
+                return TimeFrame.Daily;
+            } else if (tf == TimeFrame.Minute5) {
+                return TimeFrame.Hour;
+            } else if (tf == TimeFrame.Daily) {
+                return TimeFrame.Weekly;
+            } else if (tf == TimeFrame.Weekly) {
+                return TimeFrame.Weekly;
+            } else {
+                return TimeFrame.Hour;
+            }
         }
 
         protected override void OnTick() {
             ticks++;
 
-            foreach (var sym in pairs) {
-                foreach (var tf in timeFrames) {
-                    if (barCounters[sym][tf] < series[sym][tf].Close.Count) {
-                        //Print("New bar is created on {0} timeframe {1}", sym, tf);
-                        barCounters[sym][tf] = series[sym][tf].Close.Count;
-                        HandleOnBar(sym, tf);
-                    }
-                }
-            }
-        }
+            if (IsNewBar() || fistRun) {
 
-        private void HandleOnBar(String sym, TimeFrame tf) {
-            HandleMacNW(sym, tf);
-            File.WriteAllText("C:\\Users\\Andrey\\Desktop\\trading.json", state.AsJSON());
-        }
+                var output = new List<String>(symbols.Count);
+                output.Add(string.Format("{0,12}\t{1,8}\r\n", "Symbol", "Timing"));
+                output.Add("---------------------------------------------------------------------------------------------\n\r");
 
-        private void HandleMacNW(String sym, TimeFrame tf) {
-            var _mm50 = mm50[sym][tf];
-            var _mm150 = mm150[sym][tf];
-            var _mm300 = mm300[sym][tf];
-            var _ms = series[sym][tf];
-            var _macd = macd[sym][tf];
-
-            if (_mm150.Result.Last(1) > _mm300.Result.Last(1)
-                && IsRising(_mm150.Result)
-                && IsRising(_mm300.Result)
-                && _macd.MACD.Last(1) < 0 && _macd.Signal.Last(1) < 0) {
-
-                int relevance = 1;
-
-                if (_ms.Close.Last(1) <= _mm150.Result.Last(1)) {
-                    relevance++;
+                foreach (var sym in pairs) {
+                    HandleOnBar(sym, output);
                 }
 
-                if (_macd.MACD.Last(1) > _macd.Signal.Last(1)) {
-                    relevance++;
+                var result = "";
+                foreach (var item in output) {
+                    result += item;
                 }
 
-                Print("Signal MacNW: type=Buy timeframe={0} relevance={1}", tf, relevance);
-                state.update(sym, tf, "buy", relevance);
-            } else if (_mm150.Result.Last(1) < _mm300.Result.Last(1)
-                       && IsFalling(_mm150.Result)
-                       && IsFalling(_mm300.Result)
-                       && _macd.MACD.Last(1) > 0 && _macd.Signal.Last(1) > 0) {
-
-                int relevance = 1;
-
-                if (_ms.Close.Last(1) >= _mm150.Result.Last(1)) {
-                    relevance++;
-                }
-
-                if (_macd.MACD.Last(1) < _macd.Signal.Last(1)) {
-                    relevance++;
-                }
-
-                state.update(sym, tf, "sell", relevance);
-                Print("Signal MacNW: type=Sell timeframe={0} relevance={1}", tf, relevance);
-            } else {
-                state.update(sym, tf, "none");
-            }
-        }
-
-        private bool IsRising(DataSeries data) {
-            int periods = 5;
-            double sum = data.Last(1);
-
-            for (int i = periods; i > 1; i--) {
-                sum += data.Last(i);
+                ChartObjects.RemoveObject("screener");
+                ChartObjects.DrawText("screener", result, StaticPosition.TopLeft, Colors.Black);
             }
 
-            return (sum / periods) > data.Last(periods);
+            if (fistRun) fistRun = false;
         }
 
-        private bool IsFalling(DataSeries data) {
-            int periods = 5;
-            double sum = data.Last(1);
-            for (int i = periods; i > 1; i--) {
-                sum += data.Last(i);
-            }
+        private void HandleOnBar(String sym, List<String> output) {
+            var timing = CalculateMarketTiming(sym);
 
-            return (sum / periods) < data.Last(periods);
-        }
-    }
+            var timingStr = string.Format("{0,2},{1,2}", timing.Item1, timing.Item2);
+            var msg = string.Format("{0, 12}\t{1,8}\r\n", sym, timingStr);
 
-    public class ScreenerState {
-        private class StateItem {
-            public String status { get; set; }
-            public int relevance { get; set; }
-            public String updatedAt { get; set; }
-        }
-
-        private Dictionary<String, Dictionary<String, StateItem>> data;
-
-        public ScreenerState() {
-            data = new Dictionary<string, Dictionary<string, StateItem>>();
-        }
-
-        public void update(String sym, TimeFrame tf, String status) {
-            update(sym, tf, status, 0);
-        }
-
-        public void update(String sym, TimeFrame tf, String status, int relevance) {
-            if (!data.ContainsKey(sym)) {
-                data[sym] = new Dictionary<string, StateItem>();
-            }
-
-            string tfs = translateTimeFrame(tf);
-
-            var si = new StateItem();
-            si.status = status;
-            si.relevance = relevance;
-            si.updatedAt = DateTime.Now.ToString();
-
-            data[sym][tfs] = si;
-        }
-
-        public string AsJSON() {
-            var json = new JavaScriptSerializer();
-            return json.Serialize(data);
-        }
-
-        private string translateTimeFrame(TimeFrame tf) {
-            if (tf == TimeFrame.Daily) {
-                return "D1";
-            } else if (tf == TimeFrame.Hour) {
-                return "H1";
-            } else {
-                throw new Exception("Unexpected time frame.");
-            }
-
+            output.Add(msg);
         }
     }
 }
