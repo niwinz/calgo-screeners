@@ -50,8 +50,6 @@ namespace cAlgo.Indicators {
             var local = CalculateLocalTiming();
             var reference = CalculateReferenceTiming();
 
-            //Print("calculating market timing | Is real time?: {0} | Market Timing: {1} {2}", IsRealTime ? "yes" : "no", reference, local);
-
             var msg = string.Format("Market timing: {0} {1}", reference, local);
             ChartObjects.RemoveObject("test");
             ChartObjects.DrawText("test", msg, StaticPosition.TopCenter, Colors.Black);
