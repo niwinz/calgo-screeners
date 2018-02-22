@@ -23,7 +23,7 @@ namespace cAlgo {
     }
   }
 
-  [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.FullAccess)]
+  [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.None)]
   public class Screener : Robot {
 
     [Parameter("Source")]
@@ -35,9 +35,7 @@ namespace cAlgo {
     private Dictionary<String, MarketSeries> lseries;
     private Dictionary<String, MarketSeries> rseries;
 
-    private Dictionary<String, Symbol> symbols;
-
-    private String[] pairs = new String[] {
+    private String[] symbols = new String[] {
             "EURUSD",
             "GBPUSD",
             //"EURJPY",
@@ -70,7 +68,7 @@ namespace cAlgo {
     //private String[] pairs = new String[] { "EURUSD", "USDJPY" };
 
     private Dictionary<String, ExponentialMovingAverage> lmm8;
-    //private Dictionary<String, WeightedMovingAverage> mm50;
+    private Dictionary<String, WeightedMovingAverage> lmm50;
     private Dictionary<String, WeightedMovingAverage> lmm150;
     private Dictionary<String, WeightedMovingAverage> lmm300;
     private Dictionary<String, WeightedMovingAverage> rmm150;
@@ -79,11 +77,12 @@ namespace cAlgo {
     private Dictionary<String, MacdCrossOver> lmacd;
     private Dictionary<String, MacdCrossOver> rmacd;
 
+    private Dictionary<String, StochasticOscillator> lstoc;
+
     private long barCounter;
     private long ticks = 0;
     private TimeFrame reftf;
     private bool fistRun = true;
-
 
     protected override void OnStart() {
       barCounter = Source.Count;
@@ -91,34 +90,30 @@ namespace cAlgo {
       lseries = new Dictionary<string, MarketSeries>();
       rseries = new Dictionary<string, MarketSeries>();
 
-      symbols = new Dictionary<string, Symbol>();
-
       lmm8 = new Dictionary<string, ExponentialMovingAverage>();
-      //mm50 = new Dictionary<string, WeightedMovingAverage>();
+      lmm50 = new Dictionary<string, WeightedMovingAverage>();
       lmm150 = new Dictionary<string, WeightedMovingAverage>();
       lmm300 = new Dictionary<string, WeightedMovingAverage>();
       rmm150 = new Dictionary<string, WeightedMovingAverage>();
       rmm300 = new Dictionary<string, WeightedMovingAverage>();
+
+      lstoc = new Dictionary<string, StochasticOscillator>();
 
       lmacd = new Dictionary<string, MacdCrossOver>();
       rmacd = new Dictionary<string, MacdCrossOver>();
 
       Print("Initializing screener local state.");
 
-      foreach (var sym in pairs) {
-        symbols[sym] = MarketData.GetSymbol(sym);
-      }
-
       reftf = GetReferenceTimeframe(loctf);
 
-      foreach (var sym in pairs) {
+      foreach (var sym in symbols) {
         var lmks = MarketData.GetSeries(sym, loctf);
         var rmks = MarketData.GetSeries(sym, reftf);
 
         Print("Initializing data for: {0}/{1}.", sym, loctf);
 
         lmm8[sym] = Indicators.ExponentialMovingAverage(lmks.Close, 8);
-        //mm50[sym] = Indicators.WeightedMovingAverage(mks.Close, 50);
+        lmm50[sym] = Indicators.WeightedMovingAverage(lmks.Close, 50);
         lmm150[sym] = Indicators.WeightedMovingAverage(lmks.Close, 150);
         lmm300[sym] = Indicators.WeightedMovingAverage(lmks.Close, 300);
         rmm150[sym] = Indicators.WeightedMovingAverage(rmks.Close, 150);
@@ -126,6 +121,8 @@ namespace cAlgo {
 
         lmacd[sym] = Indicators.MacdCrossOver(lmks.Close, 26, 12, 9);
         rmacd[sym] = Indicators.MacdCrossOver(rmks.Close, 26, 12, 9);
+
+        lstoc[sym] = Indicators.StochasticOscillator(lmks, 13, 3, 3, MovingAverageType.Weighted);
 
         lseries[sym] = lmks;
         rseries[sym] = rmks;
@@ -242,6 +239,47 @@ namespace cAlgo {
     }
 
     // -------------------------------------------
+    // ----  ACC
+    // -------------------------------------------
+
+    public int GetAccSignal(string sym, TimingResult timing) {
+      var series = lseries[sym];
+      var wma50 = lmm50[sym];
+      var stoc = lstoc[sym];
+
+      // Only operate on impulsive reference timing.
+      if (timing.Item1.In(1, 4)) {
+        if (series.Low.LastValue <= wma50.Result.LastValue
+            && stoc.PercentK.LastValue < 30
+            && stoc.PercentK.LastValue < stoc.PercentD.LastValue) {
+          return 1;
+        } else if ((series.Low.LastValue <= wma50.Result.LastValue
+                    || series.Low.Last(1) <= wma50.Result.Last(1))
+                   && (stoc.PercentK.Last(1) < 30 || stoc.PercentK.LastValue <= 30)
+                   && stoc.PercentK.HasCrossedAbove(stoc.PercentD, 2)) { 
+          return 2;
+        } else {
+          return 0;
+        }
+      } else if (timing.Item1.In(-1, -4)) {
+        if (series.High.LastValue >= wma50.Result.LastValue
+            && stoc.PercentK.LastValue > 70
+            && stoc.PercentK.LastValue > stoc.PercentD.LastValue) {
+          return -1;
+        } else if ((series.High.LastValue >= wma50.Result.LastValue
+                    || series.High.Last(1) >= wma50.Result.Last(1))
+                   && (stoc.PercentK.Last(1) > 70 || stoc.PercentK.LastValue >= 70)
+                   && stoc.PercentK.HasCrossedBelow(stoc.PercentD, 2)) {
+          return -2;
+        } else {
+          return 0;
+        }
+      } else {
+        return 0;
+      }
+    }
+    
+    // -------------------------------------------
     // ----  MACD
     // -------------------------------------------
 
@@ -320,14 +358,14 @@ namespace cAlgo {
     // -------------------------------------------
 
     private void HandleUpdate() {
-      var buffer = new List<String>(symbols.Count);
+      var buffer = new List<String>(symbols.Length);
       var time = Server.Time.ToString("yyyy-MM-dd HH:mm:ss");
 
       buffer.Add(string.Format("Timeframe: {0}\r\nUpdated at: {1}\r\n\r\n\r\n", loctf.ToString(), time));
-      buffer.Add(string.Format("{0,12}\t{1,8}\t{2,8}\t{3,8}\r\n", "Symbol", "Timing", "VCN", "MACD"));
-      buffer.Add("---------------------------------------------------------------------------------------\n\r");
+      buffer.Add(string.Format("{0,12}\t{1,8}\t{2,8}\t{3,8}\t{4,8}\r\n", "Symbol", "Timing", "VCN", "MACD", "ACC"));
+      buffer.Add("-------------------------------------------------------------------------------------\n\r");
 
-      foreach (var sym in pairs) {
+      foreach (var sym in symbols) {
         buffer.Add(HandleUpdateSymbol(sym));
       }
 
@@ -344,11 +382,13 @@ namespace cAlgo {
       var timing = CalculateMarketTiming(sym);
       var vcn = GetVcnSignal(sym, timing);
       var macd = GetMacdSignal(sym, timing);
+      var acc = GetAccSignal(sym, timing);
 
       var timingStr = string.Format("{0,2},{1,2}", timing.Item1, timing.Item2);
       var vcnStr = string.Format("{0,2}", vcn);
       var macdStr = string.Format("{0,2}", macd);
-      return string.Format("{0, 12}\t{1,8}\t{2,8}\t{3,8}\r\n", sym, timingStr, vcnStr, macdStr);
+      var accStr = string.Format("{0,2}", acc);
+      return string.Format("{0, 12}\t{1,8}\t{2,8}\t{3,8}\t{4,8}\r\n", sym, timingStr, vcnStr, macdStr, accStr);
     }
   }
 }
