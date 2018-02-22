@@ -227,6 +227,9 @@ namespace cAlgo {
 
         private void HandleUpdate() {
             var output = new List<String>(symbols.Count);
+            var time = Server.Time.ToString("yyyy-MM-dd HH:mm:ss");
+
+            output.Add(string.Format("Timeframe: {0}\r\nUpdated at: {1}\r\n\r\n\r\n", loctf.ToString(), time));
             output.Add(string.Format("{0,12}\t{1,8}\r\n", "Symbol", "Timing"));
             output.Add("---------------------------------------------------------------------------------------------\n\r");
 
@@ -240,12 +243,7 @@ namespace cAlgo {
             }
 
             ChartObjects.RemoveObject("screener");
-            ChartObjects.RemoveObject("servertime");
-
             ChartObjects.DrawText("screener", result, StaticPosition.TopLeft, Colors.Black);
-
-            var time = string.Format("Updated at: {0}", Server.Time.ToString("s"));
-            ChartObjects.DrawText("servertime", time, StaticPosition.TopRight, Colors.Black);
         }
 
         private void HandleOnBar(String sym, List<String> output) {
