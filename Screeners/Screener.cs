@@ -5,59 +5,16 @@ using System.Web.Script.Serialization;
 using cAlgo.API;
 using cAlgo.API.Internals;
 using cAlgo.API.Indicators;
-using System.ComponentModel;
-using System.Drawing;
-using System.Threading;
-using System.Windows.Forms;
 
 namespace cAlgo {
-
-    public class Form1 : Form {
-        public Button button1;
-        public TextBox textBox1;
-        public Form1() {
-            button1 = new Button();
-            button1.Size = new Size(40, 40);
-            button1.Location = new Point(30, 30);
-            button1.Text = "Click me";
-            this.Controls.Add(button1);
-            button1.Click += new EventHandler(button1_Click);
-
-
-            this.textBox1 = new System.Windows.Forms.TextBox();
-            this.SuspendLayout();
-            // 
-            // textBox1
-            // 
-            this.textBox1.AcceptsReturn = true;
-            this.textBox1.AcceptsTab = true;
-            this.textBox1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.textBox1.Multiline = true;
-            this.textBox1.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            // 
-            // Form1
-            // 
-            this.ClientSize = new System.Drawing.Size(284, 264);
-            this.Controls.Add(this.textBox1);
-
-
-        }
-        private void button1_Click(object sender, EventArgs e) {
-            MessageBox.Show("Hello World");
-        }
-
-        //[STAThread]
-        //static void Main() {
-        //    Application.EnableVisualStyles();
-        //    Application.Run(new Form1());
-        //}
-    }
-
-    [Robot(TimeZone = TimeZones.UTC, AccessRights = AccessRights.FullAccess)]
+    [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.FullAccess)]
     public class Screener : Robot {
 
         [Parameter("Source")]
         public DataSeries Source { get; set; }
+
+        [Parameter("Time Frame")]
+        public TimeFrame loctf { get; set; }
 
         private Dictionary<String, MarketSeries> lseries;
         private Dictionary<String, MarketSeries> rseries;
@@ -103,11 +60,9 @@ namespace cAlgo {
         private Dictionary<String, WeightedMovingAverage> rmm150;
         private Dictionary<String, WeightedMovingAverage> rmm300;
 
-        //private Dictionary<String, StochasticOscillator> sto;
         private Dictionary<String, MacdCrossOver> lmacd;
         private Dictionary<String, MacdCrossOver> rmacd;
 
-        private Dictionary<String, long?> barCounters;
         private long barCounter;
         private long ticks = 0;
         private TimeFrame reftf;
@@ -115,7 +70,6 @@ namespace cAlgo {
 
 
         protected override void OnStart() {
-            barCounters = new Dictionary<string, long?>();
             barCounter = Source.Count;
 
             lseries = new Dictionary<string, MarketSeries>();
@@ -130,7 +84,6 @@ namespace cAlgo {
             rmm150 = new Dictionary<string, WeightedMovingAverage>();
             rmm300 = new Dictionary<string, WeightedMovingAverage>();
 
-            //sto = new Dictionary<string, StochasticOscillator>();
             lmacd = new Dictionary<string, MacdCrossOver>();
             rmacd = new Dictionary<string, MacdCrossOver>();
 
@@ -140,15 +93,13 @@ namespace cAlgo {
                 symbols[sym] = MarketData.GetSymbol(sym);
             }
 
-            reftf = GetReferenceTimeframe(MarketSeries.TimeFrame);
+            reftf = GetReferenceTimeframe(loctf);
 
             foreach (var sym in pairs) {
-                var lmks = MarketData.GetSeries(sym, MarketSeries.TimeFrame);
+                var lmks = MarketData.GetSeries(sym, loctf);
                 var rmks = MarketData.GetSeries(sym, reftf);
 
-                Print("Initializing data for: {0}/{1}.", sym, MarketSeries.TimeFrame);
-
-                barCounters[sym] = lmks.Close.Count;
+                Print("Initializing data for: {0}/{1}.", sym, loctf);
 
                 //mm8[sym] = Indicators.ExponentialMovingAverage(mks.Close, 50);
                 //mm50[sym] = Indicators.WeightedMovingAverage(mks.Close, 50);
@@ -157,7 +108,6 @@ namespace cAlgo {
                 rmm150[sym] = Indicators.WeightedMovingAverage(rmks.Close, 150);
                 rmm300[sym] = Indicators.WeightedMovingAverage(rmks.Close, 300);
 
-                //sto[sym] = Indicators.StochasticOscillator(mks, 14, 3, 3, MovingAverageType.Simple);
                 lmacd[sym] = Indicators.MacdCrossOver(lmks.Close, 26, 12, 9);
                 rmacd[sym] = Indicators.MacdCrossOver(rmks.Close, 26, 12, 9);
 
@@ -165,20 +115,11 @@ namespace cAlgo {
                 rseries[sym] = rmks;
             }
 
-            //var thread = new Thread(() => {
-            //    Application.EnableVisualStyles();
-            //    Application.Run(new Form1());
-            //});
-
-            //thread.IsBackground = true;
-            //thread.Start();
-
             Print("Initialization finished.");
         }
 
         protected override void OnStop() {
             Print("Bot Stopped with total ticks: {0}", ticks);
-
         }
 
         private bool IsNewBar() {
@@ -188,6 +129,16 @@ namespace cAlgo {
             } else {
                 return false;
             }
+        }
+
+        protected override void OnTick() {
+            ticks++;
+
+            if (IsNewBar() || fistRun) {
+                HandleUpdate();
+            }
+
+            if (fistRun) fistRun = false;
         }
 
         // -------------------------------------------
@@ -274,29 +225,27 @@ namespace cAlgo {
             }
         }
 
-        protected override void OnTick() {
-            ticks++;
+        private void HandleUpdate() {
+            var output = new List<String>(symbols.Count);
+            output.Add(string.Format("{0,12}\t{1,8}\r\n", "Symbol", "Timing"));
+            output.Add("---------------------------------------------------------------------------------------------\n\r");
 
-            if (IsNewBar() || fistRun) {
-
-                var output = new List<String>(symbols.Count);
-                output.Add(string.Format("{0,12}\t{1,8}\r\n", "Symbol", "Timing"));
-                output.Add("---------------------------------------------------------------------------------------------\n\r");
-
-                foreach (var sym in pairs) {
-                    HandleOnBar(sym, output);
-                }
-
-                var result = "";
-                foreach (var item in output) {
-                    result += item;
-                }
-
-                ChartObjects.RemoveObject("screener");
-                ChartObjects.DrawText("screener", result, StaticPosition.TopLeft, Colors.Black);
+            foreach (var sym in pairs) {
+                HandleOnBar(sym, output);
             }
 
-            if (fistRun) fistRun = false;
+            var result = "";
+            foreach (var item in output) {
+                result += item;
+            }
+
+            ChartObjects.RemoveObject("screener");
+            ChartObjects.RemoveObject("servertime");
+
+            ChartObjects.DrawText("screener", result, StaticPosition.TopLeft, Colors.Black);
+
+            var time = string.Format("Updated at: {0}", Server.Time.ToString("s"));
+            ChartObjects.DrawText("servertime", time, StaticPosition.TopRight, Colors.Black);
         }
 
         private void HandleOnBar(String sym, List<String> output) {
