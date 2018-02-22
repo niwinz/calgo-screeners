@@ -4,14 +4,12 @@
 //
 // Copyright (c) 2018 Andrey Antukh <niwi@niwi.nz>
 
-/*
- * VCN Strategy indicator.
- *  
- *  This indicator is not suitable for create automated robots,
- *  it works just as visual indicator for quick look on the
- *  possible signal (this is because it does not uses the
- *  reference market timing).
- */
+// VCN Strategy indicator.
+//  
+// This indicator is not suitable for create automated robots,
+// it works just as visual indicator for quick look on the
+// possible signal (this is because it does not uses the
+// reference market timing).
 
 using cAlgo.API;
 using cAlgo.API.Internals;
@@ -19,7 +17,7 @@ using cAlgo.API.Indicators;
 
 namespace cAlgo.Indicators {
   [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-  public class Vcn : Indicator {
+  public class VcnSignal : Indicator {
     private string upArrow = "↑";
     private string downArrow = "↓";
     private double arrowOffset;
