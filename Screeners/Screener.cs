@@ -56,7 +56,7 @@ namespace cAlgo {
             //"GBPAUD",
             //"EURCAD",
             //"AUDCAD",
-            //"GBPCHF",
+            "GBPCHF",
             //"AUDCHF",
             //"GBPCAD",
             //"GBPNZD",
@@ -242,6 +242,45 @@ namespace cAlgo {
     }
 
     // -------------------------------------------
+    // ----  MACD
+    // -------------------------------------------
+
+    public int GetMacdSignal(string sym, TimingResult timing) {
+      var series = lseries[sym];
+      var wma150 = lmm150[sym];
+      var macd = lmacd[sym];
+
+      // Only operate on impulsive reference timing.
+      if (timing.Item1.In(1, 4)) {
+        if (series.Low.LastValue <= wma150.Result.LastValue
+            && (macd.Signal.LastValue < 0 || macd.MACD.LastValue < 0)
+            && macd.Histogram.LastValue < 0) {
+          return 1;
+        } else if (series.Low.LastValue <= wma150.Result.LastValue
+                   && (macd.Signal.LastValue < 0 || macd.MACD.LastValue < 0)
+                   && macd.Histogram.LastValue >= 0) {
+          return 2;
+        } else {
+          return 0;
+        }
+      } else if (timing.Item1.In(-1, -4)) {
+        if (series.High.LastValue >= wma150.Result.LastValue
+            && (macd.Signal.LastValue > 0 || macd.MACD.LastValue > 0)
+            && macd.Histogram.LastValue > 0) {
+          return -1;
+        } else if (series.Low.LastValue >= wma150.Result.LastValue
+                   && (macd.Signal.LastValue > 0 || macd.MACD.LastValue > 0)
+                   && macd.Histogram.LastValue <= 0) {
+          return -2;
+        } else {
+          return 0;
+        }
+      } else {
+        return 0;
+      }
+    }
+
+    // -------------------------------------------
     // ----  VCN
     // -------------------------------------------
 
@@ -285,7 +324,7 @@ namespace cAlgo {
       var time = Server.Time.ToString("yyyy-MM-dd HH:mm:ss");
 
       buffer.Add(string.Format("Timeframe: {0}\r\nUpdated at: {1}\r\n\r\n\r\n", loctf.ToString(), time));
-      buffer.Add(string.Format("{0,12}\t{1,8}\t{2,8}\r\n", "Symbol", "Timing", "VCN"));
+      buffer.Add(string.Format("{0,12}\t{1,8}\t{2,8}\t{3,8}\r\n", "Symbol", "Timing", "VCN", "MACD"));
       buffer.Add("---------------------------------------------------------------------------------------\n\r");
 
       foreach (var sym in pairs) {
@@ -304,10 +343,12 @@ namespace cAlgo {
     private string HandleUpdateSymbol(String sym) {
       var timing = CalculateMarketTiming(sym);
       var vcn = GetVcnSignal(sym, timing);
+      var macd = GetMacdSignal(sym, timing);
 
       var timingStr = string.Format("{0,2},{1,2}", timing.Item1, timing.Item2);
       var vcnStr = string.Format("{0,2}", vcn);
-      return string.Format("{0, 12}\t{1,8}\t{2,8}\r\n", sym, timingStr, vcnStr);
+      var macdStr = string.Format("{0,2}", macd);
+      return string.Format("{0, 12}\t{1,8}\t{2,8}\t{3,8}\r\n", sym, timingStr, vcnStr, macdStr);
     }
   }
 }
