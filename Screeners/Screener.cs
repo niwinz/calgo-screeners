@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using cAlgo.API;
 using cAlgo.API.Internals;
 using cAlgo.API.Indicators;
+using Microsoft.Win32;
 
 namespace cAlgo {
   static class Extensions {
@@ -60,11 +61,17 @@ namespace cAlgo {
     }
   }
 
-  [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.None)]
+  [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.Registry)]
   public class Screener : Robot {
 
     [Parameter("Source")]
     public DataSeries Source { get; set; }
+
+    private TimeFrame[] timeFrames = new TimeFrame[] {
+      TimeFrame.Minute10,
+      TimeFrame.Hour,
+      TimeFrame.Daily
+    };
 
     private String[] symbols = new String[] {
       "EURUSD",
@@ -107,7 +114,6 @@ namespace cAlgo {
     private Dictionary<String, Dictionary<TimeFrame, MarketSeries>> lseries;
     private Dictionary<String, Dictionary<TimeFrame, MarketSeries>> rseries;
 
-    private Dictionary<String, Dictionary<TimeFrame, WeightedMovingAverage>> lmm50;
     private Dictionary<String, Dictionary<TimeFrame, WeightedMovingAverage>> lmm150;
     private Dictionary<String, Dictionary<TimeFrame, WeightedMovingAverage>> lmm300;
     private Dictionary<String, Dictionary<TimeFrame, WeightedMovingAverage>> rmm150;
@@ -115,9 +121,6 @@ namespace cAlgo {
 
     private Dictionary<String, Dictionary<TimeFrame, MacdCrossOver>> lmacd;
     private Dictionary<String, Dictionary<TimeFrame, MacdCrossOver>> rmacd;
-
-    private Dictionary<String, Dictionary<TimeFrame, StochasticOscillator>> lstoc;
-    private List<TimeFrame> timeFrames;
 
     private State state;
     private long barCounter;
@@ -128,18 +131,15 @@ namespace cAlgo {
       barCounter = Source.Count;
 
       state = new State();
-      timeFrames = new List<TimeFrame>(new[] { TimeFrame.Hour, TimeFrame.Daily });
 
       lseries = new Dictionary<string, Dictionary<TimeFrame, MarketSeries>>();
       rseries = new Dictionary<string, Dictionary<TimeFrame, MarketSeries>>();
 
-      lmm50 = new Dictionary<string, Dictionary<TimeFrame, WeightedMovingAverage>>();
       lmm150 = new Dictionary<string, Dictionary<TimeFrame, WeightedMovingAverage>>();
       lmm300 = new Dictionary<string, Dictionary<TimeFrame, WeightedMovingAverage>>();
       rmm150 = new Dictionary<string, Dictionary<TimeFrame, WeightedMovingAverage>>();
       rmm300 = new Dictionary<string, Dictionary<TimeFrame, WeightedMovingAverage>>();
 
-      lstoc = new Dictionary<string, Dictionary<TimeFrame, StochasticOscillator>>();
       lmacd = new Dictionary<string, Dictionary<TimeFrame, MacdCrossOver>>();
       rmacd = new Dictionary<string, Dictionary<TimeFrame, MacdCrossOver>>();
 
@@ -149,14 +149,11 @@ namespace cAlgo {
         lseries[sym] = new Dictionary<TimeFrame, MarketSeries>();
         rseries[sym] = new Dictionary<TimeFrame, MarketSeries>();
 
-        //lmm8[sym] = new Dictionary<TimeFrame, ExponentialMovingAverage>();
-        lmm50[sym] = new Dictionary<TimeFrame, WeightedMovingAverage>();
         lmm150[sym] = new Dictionary<TimeFrame, WeightedMovingAverage>();
         lmm300[sym] = new Dictionary<TimeFrame, WeightedMovingAverage>();
         rmm150[sym] = new Dictionary<TimeFrame, WeightedMovingAverage>();
         rmm300[sym] = new Dictionary<TimeFrame, WeightedMovingAverage>();
 
-        lstoc[sym] = new Dictionary<TimeFrame, StochasticOscillator>();
         lmacd[sym] = new Dictionary<TimeFrame, MacdCrossOver>();
         rmacd[sym] = new Dictionary<TimeFrame, MacdCrossOver>();
 
@@ -167,7 +164,6 @@ namespace cAlgo {
           var lmks = MarketData.GetSeries(sym, tf);
           var rmks = MarketData.GetSeries(sym, reftf);
 
-          lmm50[sym][tf] = Indicators.WeightedMovingAverage(lmks.Close, 50);
           lmm150[sym][tf] = Indicators.WeightedMovingAverage(lmks.Close, 150);
           lmm300[sym][tf] = Indicators.WeightedMovingAverage(lmks.Close, 300);
           rmm150[sym][tf] = Indicators.WeightedMovingAverage(rmks.Close, 150);
@@ -175,8 +171,6 @@ namespace cAlgo {
 
           lmacd[sym][tf] = Indicators.MacdCrossOver(lmks.Close, 26, 12, 9);
           rmacd[sym][tf] = Indicators.MacdCrossOver(rmks.Close, 26, 12, 9);
-
-          lstoc[sym][tf] = Indicators.StochasticOscillator(lmks, 13, 3, 3, MovingAverageType.Weighted);
 
           lseries[sym][tf] = lmks;
           rseries[sym][tf] = rmks;
@@ -275,7 +269,7 @@ namespace cAlgo {
     private TimeFrame GetReferenceTimeframe(TimeFrame tf) {
       if (tf == TimeFrame.Hour) {
         return TimeFrame.Daily;
-      } else if (tf == TimeFrame.Minute5) {
+      } else if (tf == TimeFrame.Minute10) {
         return TimeFrame.Hour;
       } else if (tf == TimeFrame.Daily) {
         return TimeFrame.Weekly;
@@ -298,80 +292,48 @@ namespace cAlgo {
     }
 
     // -------------------------------------------
-    // ----  ACC
-    // -------------------------------------------
-
-    public int GetAccSignal(string sym, TimeFrame tf, Timing timing) {
-      var series = lseries[sym][tf];
-      var wma50 = lmm50[sym][tf];
-      var stoc = lstoc[sym][tf];
-
-      // Only operate on impulsive reference timing.
-      if (timing.Reference.In(1, 4)) {
-        if (series.Low.LastValue <= wma50.Result.LastValue
-            && stoc.PercentK.LastValue < 30
-            && stoc.PercentK.LastValue < stoc.PercentD.LastValue) {
-          return 1;
-        } else if ((series.Low.LastValue <= wma50.Result.LastValue
-                    || series.Low.Last(1) <= wma50.Result.Last(1))
-                   && (stoc.PercentK.Last(1) < 30 || stoc.PercentK.LastValue <= 30)
-                   && stoc.PercentK.HasCrossedAbove(stoc.PercentD, 2)) { 
-          return 2;
-        } else {
-          return 0;
-        }
-      } else if (timing.Reference.In(-1, -4)) {
-        if (series.High.LastValue >= wma50.Result.LastValue
-            && stoc.PercentK.LastValue > 70
-            && stoc.PercentK.LastValue > stoc.PercentD.LastValue) {
-          return -1;
-        } else if ((series.High.LastValue >= wma50.Result.LastValue
-                    || series.High.Last(1) >= wma50.Result.Last(1))
-                   && (stoc.PercentK.Last(1) > 70 || stoc.PercentK.LastValue >= 70)
-                   && stoc.PercentK.HasCrossedBelow(stoc.PercentD, 2)) {
-          return -2;
-        } else {
-          return 0;
-        }
-      } else {
-        return 0;
-      }
-    }
-    
-    // -------------------------------------------
     // ----  MACD
     // -------------------------------------------
 
-    public int GetMacdSignal(string sym, TimeFrame tf, Timing timing) {
+    public int GetSignal(string sym, TimeFrame tf, Timing timing) {
       var series = lseries[sym][tf];
       var wma150 = lmm150[sym][tf];
+      var wma300 = lmm300[sym][tf];
       var macd = lmacd[sym][tf];
 
       // Only operate on impulsive reference timing.
+
       if (timing.Reference.In(1, 4)) {
-        if (series.Low.LastValue <= wma150.Result.LastValue
-            && (macd.Signal.LastValue < 0 || macd.MACD.LastValue < 0)
-            && macd.Histogram.LastValue < 0) {
-          return 1;
-        } else if (series.Low.LastValue <= wma150.Result.LastValue
-                   && (macd.Signal.LastValue < 0 || macd.MACD.LastValue < 0)
-                   && macd.Histogram.LastValue >= 0) {
-          return 2;
-        } else {
-          return 0;
+        int punctuation = 0;
+
+        if (series.Low.LastValue <= wma150.Result.LastValue && (macd.Signal.LastValue <= 0 || macd.MACD.LastValue <= 0)) {
+          punctuation++;
+
+          if (macd.Histogram.LastValue >= 0) {
+            punctuation += 2;
+          }
+
+          if (series.Low.LastValue <= wma300.Result.LastValue) {
+            punctuation++;
+          }
         }
+        return punctuation;
       } else if (timing.Reference.In(-1, -4)) {
-        if (series.High.LastValue >= wma150.Result.LastValue
-            && (macd.Signal.LastValue > 0 || macd.MACD.LastValue > 0)
-            && macd.Histogram.LastValue > 0) {
-          return -1;
-        } else if (series.Low.LastValue >= wma150.Result.LastValue
-                   && (macd.Signal.LastValue > 0 || macd.MACD.LastValue > 0)
-                   && macd.Histogram.LastValue <= 0) {
-          return -2;
-        } else {
-          return 0;
+        int punctuation = 0;
+
+        if (series.High.LastValue >= wma150.Result.LastValue && (macd.Signal.LastValue >= 0 || macd.MACD.LastValue >= 0)) {
+          punctuation++;
+
+          if (macd.Histogram.LastValue <= 0) {
+            punctuation += 2;
+          }
+
+          if (series.High.LastValue >= wma300.Result.LastValue) {
+            punctuation++;
+          }
         }
+
+        return punctuation;
       } else {
         return 0;
       }
@@ -385,11 +347,11 @@ namespace cAlgo {
       foreach (var tf in timeFrames) {
         foreach (var sym in symbols) {
           var timing = CalculateMarketTiming(sym, tf);
-          var macd = GetMacdSignal(sym, tf, timing);
-          var acc = GetAccSignal(sym, tf, timing);
+          var punctuation = GetSignal(sym, tf, timing);
 
-          var data = new State.Data(timing, macd, acc);
-          state.Update(sym, tf, data);
+          var value = new State.Value(sym, tf, timing, punctuation);
+          state.Update(sym, tf, value);
+          HandleNotifications(value);
         }
       }
 
@@ -398,21 +360,37 @@ namespace cAlgo {
       ChartObjects.RemoveObject("screener");
       ChartObjects.DrawText("screener", output, StaticPosition.TopLeft, Colors.Black);
     }
+
+    // -------------------------------------------
+    // ----  Notifications
+    // -------------------------------------------
+
+    public void HandleNotifications(State.Value value) {
+      var keyName = "HKEY_CURRENT_USER\\ScreenerEmailNotificationsState";
+      var subkey = String.Format("{0}-{1}", value.Symbol, value.TimeFrame.ToString());
+
+      if (value.Punctuation == 0) {
+        Registry.SetValue(keyName, subkey, value.Punctuation);
+      } else {
+        var candidate = (int)Registry.GetValue(keyName, subkey, 0);
+
+        var from = "andsux@gmail.com";
+        var to = "niwi@niwi.nz";
+
+        if ((value.Punctuation > candidate && candidate >= 0) || (value.Punctuation < candidate && candidate <= 0)) {
+          Registry.SetValue(keyName, subkey, value.Punctuation);
+
+          var timeFrame = state.TimeFrameToString(value.TimeFrame);
+          var tradeType = value.Punctuation > 0 ? "Buy" : "Sell";
+          var subject = String.Format("Trade oportunity: {0} {1}/{2} - Ranking: {3} ", tradeType, value.Symbol, timeFrame, value.Punctuation);
+
+          Notifications.SendEmail(from, to, subject, "");
+        }
+      }
+    }
   }
 
   public class State {
-    public class Data : Tuple<Timing, Int32, Int32> {
-      public Timing Timing { get { return Item1; }  }
-      public Int32 Macd { get { return Item2; } }
-      public Int32 Acc { get { return Item3; } }
-
-      public Data(Timing timing, Int32 macd, Int32 acc) : base(timing, macd, acc) { }
-
-      public bool IsZero() {
-        return Macd == 0 && Acc == 0;
-      }
-    }
-
     public class Key : Tuple<String, TimeFrame> {
       public String Symbol { get { return Item1; } }
       public TimeFrame TimeFrame { get { return Item2; } }
@@ -423,13 +401,32 @@ namespace cAlgo {
     public class Value {
       public DateTime CreatedAt { get; set; }
       public DateTime UpdatedAt { get; set; }
-      public Data Data { get; set; }
+      public Timing Timing { get; set; }
+      public TimeFrame TimeFrame { get; set; }
+      public String Symbol { get; set; }
+      public int Punctuation { get; set; }
 
-      public Value() { }
-      public Value(Data data) {
-        this.Data = data;
+      public Value(String symbol, TimeFrame timeFrame, Timing timing, int punctuation) {
+        this.Symbol = symbol;
+        this.TimeFrame = timeFrame;
+        this.Punctuation = punctuation;
+        this.Timing = timing;
         this.CreatedAt = DateTime.Now;
         this.UpdatedAt = DateTime.Now;
+      }
+
+      public bool IsZero() {
+        return Punctuation == 0;
+      }
+
+      public void UpdateWith(Value other) {
+        if (other.TimeFrame != this.TimeFrame ||
+            other.Symbol != this.Symbol) {
+          throw new Exception("Cant update value with not matching TimeFrame & Symbol.");
+        }
+        this.Punctuation = other.Punctuation;
+        this.Timing = other.Timing;
+        this.UpdatedAt = other.CreatedAt;
       }
     }
 
@@ -439,30 +436,27 @@ namespace cAlgo {
       local = new Dictionary<Key, Value>();
     }
 
-    public void Update(String sym, TimeFrame tf, Data data) {
+    public void Update(String sym, TimeFrame tf, Value value) {
       var key = new Key(sym, tf);
 
-      if (data.IsZero()) {
+      if (value.IsZero()) {
         local.Remove(key);
       } else {
         if (local.ContainsKey(key)) {
-          var value = local[key];
-          value.Data = data;
-          value.UpdatedAt = DateTime.Now;
+          local[key].UpdateWith(value);
         } else {
-          var value = new Value(data);
           local.Add(key, value);
         }
       }
     }
 
-    private string TimeFrameToString(TimeFrame tf) {
+    public string TimeFrameToString(TimeFrame tf) {
       if (tf == TimeFrame.Hour) {
         return "H1";
       } else if (tf == TimeFrame.Daily) {
         return "D1";
       } else {
-        return "M5";
+        return "M10";
       }
     }
 
@@ -470,21 +464,19 @@ namespace cAlgo {
       var output = "";
 
       output += string.Format("\t\t\t\tUpdated at: {0}\r\n\r\n", DateTime.Now.ToString("yyyy - MM - dd HH: mm:ss"));
-      output += string.Format("\t{0,-10}\t{1,-5}\t{2,-8}\t{3,-8}\t{4,-8}\t{5,-20}\r\n", "Symbol", "TF", "TM",  "MACD", "ACC", "Created At");
-      output += "\t---------------------------------------------------------------------------------------------------------------\r\n";
+      output += string.Format("\t{0,-10}\t{1,-5}\t{2,-8}\t{3,-8}\t{4,-20}\r\n", "Symbol", "TF", "TM",  "VAL", "Created At");
+      output += "\t----------------------------------------------------------------------------------------------------------\r\n";
 
       foreach (var item in local.ToList().OrderBy(o => o.Value.CreatedAt).Reverse()) {
         var key = item.Key;
         var value = item.Value;
-
-        var timing = value.Data.Timing;
+        var timing = value.Timing;
 
         var tfStr = TimeFrameToString(key.TimeFrame);
         var timingStr = string.Format("{0,2},{1,2}", timing.Reference, timing.Local);
 
-        var macdStr = string.Format("{0,2}", value.Data.Macd);
-        var accStr = string.Format("{0,2}", value.Data.Acc);
-        output += string.Format("\t{0,-10}\t{1,-5}\t{2,-8}\t{3,-8}\t{4,-8}\t{5,-20}\r\n", key.Symbol, tfStr, timingStr,  macdStr, accStr, value.CreatedAt.TimeAgo());
+        var pointsStr = string.Format("{0,2}", value.Punctuation);
+        output += string.Format("\t{0,-10}\t{1,-5}\t{2,-8}\t{3,-8}\t{4,-20}\r\n", key.Symbol, tfStr, timingStr, pointsStr, value.CreatedAt.TimeAgo());
       }
 
       return output;
