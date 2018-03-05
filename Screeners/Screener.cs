@@ -123,13 +123,14 @@ namespace cAlgo {
       "DE30",
       "STOXX50",
       "AUS200",
-      "XTIUSD"
+      // "XTIUSD" 
     };
 
     private Dictionary<String, MarketSeries> lseries;
     private Dictionary<String, MarketSeries> rseries;
 
     private Dictionary<String, ExponentialMovingAverage> lmm8;
+    private Dictionary<String, WeightedMovingAverage> lmm50;
     private Dictionary<String, WeightedMovingAverage> lmm150;
     private Dictionary<String, WeightedMovingAverage> lmm300;
     private Dictionary<String, WeightedMovingAverage> rmm150;
@@ -152,6 +153,7 @@ namespace cAlgo {
       rseries = new Dictionary<string, MarketSeries>();
 
       lmm8 = new Dictionary<string, ExponentialMovingAverage>();
+      lmm50 = new Dictionary<string, WeightedMovingAverage>();
       lmm150 = new Dictionary<string, WeightedMovingAverage>();
       lmm300 = new Dictionary<string, WeightedMovingAverage>();
       rmm150 = new Dictionary<string, WeightedMovingAverage>();
@@ -170,6 +172,7 @@ namespace cAlgo {
         var rmks = MarketData.GetSeries(sym, reftf);
 
         lmm8[sym] = Indicators.ExponentialMovingAverage(lmks.Close, 8);
+        lmm50[sym] = Indicators.WeightedMovingAverage(lmks.Close, 50);
         lmm150[sym] = Indicators.WeightedMovingAverage(lmks.Close, 150);
         lmm300[sym] = Indicators.WeightedMovingAverage(lmks.Close, 300);
         rmm150[sym] = Indicators.WeightedMovingAverage(rmks.Close, 150);
@@ -322,6 +325,7 @@ namespace cAlgo {
 
     public int GetMacdSignal(string sym, Timing timing) {
       var series = lseries[sym];
+      var wma50 = lmm50[sym];
       var wma150 = lmm150[sym];
       var wma300 = lmm300[sym];
       var macd = lmacd[sym];
@@ -336,44 +340,38 @@ namespace cAlgo {
 
       if (IsLocalTrendUp) {
         if (series.Low.LastValue <= wma150.Result.LastValue && (macd.Signal.LastValue <= 0 || macd.MACD.LastValue <= 0)) {
-          points++;
+          points += 2;
 
-          if (macd.Histogram.LastValue >= 0) {
-            points += 2;
-          }
+          if (wma50.Result.LastValue >= wma300.Result.LastValue) {
+            points += 1;
 
-          if (series.Low.LastValue <= wma300.Result.LastValue) {
-            points++;
-          }
-          
-          if (timing.Reference.In(1,4)) {
-            points++;
-          }
+            if (macd.Histogram.LastValue >= 0) {
+              points += 1;
+            }
 
-          // Revisit this (not pretty sure about this)
-          if (timing.Reference == -2) {
-            points++;
+            if (timing.Reference.In(1, 4)) {
+              points += 1;
+            }
+          } else {
+            points -= 1;
           }
         }
       } else if (IsLocalTrendDown) {
         if (series.High.LastValue >= wma150.Result.LastValue && (macd.Signal.LastValue >= 0 || macd.MACD.LastValue >= 0)) {
-          points++;
+          points -= 2;
 
-          if (macd.Histogram.LastValue <= 0) {
-            points += 2;
-          }
+          if (wma50.Result.LastValue <= wma300.Result.LastValue) {
+            points -= 1;
 
-          if (series.High.LastValue >= wma300.Result.LastValue) {
-            points++;
-          }
+            if (macd.Histogram.LastValue <= 0) {
+              points -= 1;
+            }
 
-          if (timing.Reference.In(-1, -4)) {
-            points++;
-          }
-
-          // Revisit this (not pretty sure about this)
-          if (timing.Reference == 2) {
-            points++;
+            if (timing.Reference.In(-1, -4)) {
+              points -= 1;
+            }
+          } else {
+            points += 1;
           }
         }
       }
@@ -395,16 +393,16 @@ namespace cAlgo {
           points = 2;
         } else if (series.Low.LastValue > ema8.Result.LastValue
                    && series.Low.Last(1) > ema8.Result.Last(1)) {
-          points++;
+          points = 1;
         }
       } else if (timing.Reference.In(-1, -4) && timing.Local.In(-1, -4)) {
         if (series.High.Last(1) < ema8.Result.Last(1)
             && series.High.Last(2) < ema8.Result.Last(2)
             && series.High.LastValue >= ema8.Result.LastValue) {
-          points = 2;
+          points = -2;
         } else if (series.High.LastValue < ema8.Result.LastValue
                    && series.High.Last(1) < ema8.Result.Last(1)) {
-          points++;
+          points = -1;
         }
       }
 
@@ -472,9 +470,9 @@ namespace cAlgo {
       }
 
       public string GetSignalName() {
-        if (this.Macd > 0) {
+        if (this.Macd != 0) {
           return "MACD";
-        } else if (this.Vcn > 0) {
+        } else if (this.Vcn != 0) {
           return "VCN";
         } else {
           return "NONE";
