@@ -80,8 +80,17 @@ namespace cAlgo {
     [Parameter("Time Frame")]
     public TimeFrame TFrame { get; set; }
 
-    [Parameter("Notifications?")]
-    public Boolean EnableNotifications { get; set; }
+    [Parameter("Enable MACD?", DefaultValue = true)]
+    public Boolean EnableMacd { get; set; }
+
+    [Parameter("Enable VCN?", DefaultValue = false)]
+    public Boolean EnableVcn { get; set; }
+
+    [Parameter("Enable email alerts?", DefaultValue = false)]
+    public Boolean EnableEmailAlerts { get; set; }
+
+    [Parameter("Enable sound Alerts?", DefaultValue = false)]
+    public Boolean EnableSoundAlerts { get; set; }
 
     private String[] symbols = new String[] {
       "EURUSD",
@@ -126,6 +135,8 @@ namespace cAlgo {
       // "XTIUSD" 
     };
 
+    private String AlertSoundPath = "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-1.wav";
+
     private Dictionary<String, MarketSeries> lseries;
     private Dictionary<String, MarketSeries> rseries;
 
@@ -139,14 +150,12 @@ namespace cAlgo {
     private Dictionary<String, MacdCrossOver> lmacd;
     private Dictionary<String, MacdCrossOver> rmacd;
 
+    private Dictionary<String, AverageTrueRange> latr;
+
+
     private State state;
-    private long barCounter;
-    private long ticks = 0;
-    private bool fistRun = true;
 
     protected override void OnStart() {
-      barCounter = Source.Count;
-
       state = new State(TFrame);
 
       lseries = new Dictionary<string, MarketSeries>();
@@ -161,6 +170,8 @@ namespace cAlgo {
 
       lmacd = new Dictionary<string, MacdCrossOver>();
       rmacd = new Dictionary<string, MacdCrossOver>();
+
+      latr = new Dictionary<string, AverageTrueRange>();
 
       Print("Initializing screener local state.");
 
@@ -181,6 +192,8 @@ namespace cAlgo {
         lmacd[sym] = Indicators.MacdCrossOver(lmks.Close, 26, 12, 9);
         rmacd[sym] = Indicators.MacdCrossOver(rmks.Close, 26, 12, 9);
 
+        latr[sym] = Indicators.AverageTrueRange(lmks, 14, MovingAverageType.Exponential);
+
         lseries[sym] = lmks;
         rseries[sym] = rmks;
       }
@@ -192,40 +205,37 @@ namespace cAlgo {
       ChartObjects.DrawText("screener", output, StaticPosition.TopLeft, Colors.Black);
     }
 
-    protected override void OnStop() {
-      Print("Bot Stopped with total ticks: {0}", ticks);
-    }
-
-    private bool IsNewBar() {
-      if (barCounter < Source.Count) {
-        barCounter = Source.Count;
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    protected override void OnTick() {
-      ticks++;
-
-      if (IsNewBar() || fistRun) {
-        HandleUpdate();
-      }
-
-      if (fistRun) fistRun = false;
-    }
-
-    private void HandleUpdate() {
+    protected override void OnBar() {
       foreach (var sym in symbols) {
         var timing = CalculateMarketTiming(sym);
-        var macd = GetMacdSignal(sym, timing);
-        var vcn = GetVcnSignal(sym, timing);
 
-        var value = new State.Value(sym, timing, macd, vcn);
-        state.Update(value);
+        if (EnableMacd) {
+          var val = GetMacdSignal(sym, timing);
+          var value = new State.Value("MACD", sym, timing, val);
+          state.Update(value);
 
-        if (EnableNotifications) {
-          HandleNotifications(value);
+          if (EnableEmailAlerts) {
+            HandleEmailAlerts(value);
+
+          }
+
+          if (EnableSoundAlerts) {
+            HandleSoundAlerts(value);
+          }
+        }
+
+        if (EnableVcn) {
+          var val = GetVcnSignal(sym, timing);
+          var value = new State.Value("VCN", sym, timing, val);
+          state.Update(value);
+
+          if (EnableEmailAlerts) {
+            HandleEmailAlerts(value);
+          }
+
+          if (EnableSoundAlerts) {
+            HandleSoundAlerts(value);
+          }
         }
       }
       
@@ -330,92 +340,67 @@ namespace cAlgo {
       var wma300 = lmm300[sym];
       var macd = lmacd[sym];
 
-      var IsLocalTrendUp = (wma150.Result.LastValue > wma300.Result.LastValue
-                            && wma150.Result.Last(1) > wma300.Result.Last(1));
-
-      var IsLocalTrendDown = (wma150.Result.LastValue < wma300.Result.LastValue
-                              && wma150.Result.Last(1) < wma300.Result.Last(1));
-
-      int points = 0;
-
-      if (IsLocalTrendUp) {
-        if (series.Low.LastValue <= wma150.Result.LastValue && (macd.Signal.LastValue <= 0 || macd.MACD.LastValue <= 0)) {
-          points += 2;
-
-          if (wma50.Result.LastValue >= wma300.Result.LastValue) {
-            points += 1;
-
-            if (macd.Histogram.LastValue >= 0) {
-              points += 1;
-            }
-
-            if (timing.Reference.In(1, 4)) {
-              points += 1;
-            }
-          } else {
-            points -= 1;
-          }
-        }
-      } else if (IsLocalTrendDown) {
-        if (series.High.LastValue >= wma150.Result.LastValue && (macd.Signal.LastValue >= 0 || macd.MACD.LastValue >= 0)) {
-          points -= 2;
-
-          if (wma50.Result.LastValue <= wma300.Result.LastValue) {
-            points -= 1;
-
-            if (macd.Histogram.LastValue <= 0) {
-              points -= 1;
-            }
-
-            if (timing.Reference.In(-1, -4)) {
-              points -= 1;
-            }
-          } else {
-            points += 1;
-          }
+      
+      if (wma150.Result.LastValue > wma300.Result.LastValue
+          && wma150.Result.Last(1) > wma300.Result.Last(1)
+          && timing.Reference.In(1, 4, -2, -3)
+          && series.Low.LastValue <= wma150.Result.LastValue
+          && macd.Signal.LastValue < 0
+          && macd.MACD.LastValue < 0) {
+        if(macd.Histogram.LastValue <= 0) {
+          return 1;
+        } else {
+          return 2;
         }
       }
 
-      return points;
+      if (wma150.Result.LastValue < wma300.Result.LastValue
+          && wma150.Result.Last(1) < wma300.Result.Last(1)
+          && timing.Reference.In(-1, -4, 2, 3)
+          && series.High.LastValue >= wma150.Result.LastValue
+          && macd.Signal.LastValue > 0
+          && macd.MACD.LastValue > 0) {
+        if (macd.Histogram.LastValue >= 0) {
+          return 1;
+        } else {
+          return 2;
+        }
+      }
+
+      return 0;
     }
 
     public int GetVcnSignal(String sym, Timing timing) {
-      int points = 0;
-
       var series = lseries[sym];
       var wma150 = lmm150[sym];
-      var ema8 = lmm8[sym]; 
+      var ema8 = lmm8[sym];
 
-      if (timing.Reference.In(1, 4) && timing.Local.In(1, 4)) {
-        if (series.Low.Last(1) > ema8.Result.Last(1)
-            && series.Low.Last(2) > ema8.Result.Last(2)
-            && series.Low.LastValue <= ema8.Result.LastValue) {
-          points = 2;
-        } else if (series.Low.LastValue > ema8.Result.LastValue
-                   && series.Low.Last(1) > ema8.Result.Last(1)) {
-          points = 1;
-        }
-      } else if (timing.Reference.In(-1, -4) && timing.Local.In(-1, -4)) {
-        if (series.High.Last(1) < ema8.Result.Last(1)
-            && series.High.Last(2) < ema8.Result.Last(2)
-            && series.High.LastValue >= ema8.Result.LastValue) {
-          points = -2;
-        } else if (series.High.LastValue < ema8.Result.LastValue
-                   && series.High.Last(1) < ema8.Result.Last(1)) {
-          points = -1;
-        }
+      if (timing.Reference.In(1, 4)
+          && timing.Local.In(1, 4)
+          && series.Low.Last(1) > ema8.Result.Last(1)
+          && series.Low.Last(2) > ema8.Result.Last(2)
+          && series.Low.LastValue <= ema8.Result.LastValue) {
+        return 2;
       }
 
-      return points;
+      if (timing.Reference.In(-1, -4)
+          && timing.Local.In(-1, -4)
+          && series.High.Last(1) < ema8.Result.Last(1)
+          && series.High.Last(2) < ema8.Result.Last(2)
+          && series.High.LastValue >= ema8.Result.LastValue) {
+        return -2;
+      }
+
+      return 0;
     }
 
     // -------------------------------------------
     // ----  Notifications
     // -------------------------------------------
 
-    public void HandleNotifications(State.Value value) {
+    public void HandleEmailAlerts(State.Value value) {
       var keyName = "HKEY_CURRENT_USER\\ScreenerEmailNotificationsState";
-      var subkey = String.Format("{0}-{1}", value.Symbol, this.TFrame);
+      var subkey = String.Format("{0}-{1}", value.GetKey(), this.TFrame);
 
       if (value.IsZero()) {
         Registry.SetValue(keyName, subkey, 0);
@@ -425,14 +410,28 @@ namespace cAlgo {
         var from = "andsux@gmail.com";
         var to = "niwi@niwi.nz";
 
-        if ((value.GetPunctuation() > candidate && candidate >= 0) || (value.GetPunctuation() < candidate && candidate <= 0)) {
-          Registry.SetValue(keyName, subkey, value.GetPunctuation());
+        if ((value.Val > candidate && candidate >= 0) || (value.Val < candidate && candidate <= 0)) {
+          Registry.SetValue(keyName, subkey, value.Val);
          
           var tradeType = value.GetTradeType().ToString();
-          var signalName = value.GetSignalName();
-          var subject = String.Format("Trade oportunity: {0} {1} {2}/{3} - Punctuation: {4} ", signalName, tradeType, value.Symbol, TFrame.AsString(), value.GetPunctuation());
+          var subject = String.Format("Trade oportunity: {0} {1} {2}/{3} - Punctuation: {4} ", value.Name, tradeType, value.Symbol, TFrame.AsString(), value.Val);
 
           Notifications.SendEmail(from, to, subject, "");
+        }
+      }
+    }
+
+    public void HandleSoundAlerts(State.Value value) {
+      var keyName = "HKEY_CURRENT_USER\\ScreenerEmailNotificationsState";
+      var subkey = String.Format("{0}-{1}-SND", value.GetKey(), this.TFrame);
+
+      if (value.IsZero()) {
+        Registry.SetValue(keyName, subkey, 0);
+      } else {
+        var candidate = (int)Registry.GetValue(keyName, subkey, 0);
+        if ((value.Val > candidate && candidate >= 0) || (value.Val < candidate && candidate <= 0)) {
+          Registry.SetValue(keyName, subkey, value.Val);
+          Notifications.PlaySound(AlertSoundPath);
         }
       }
     }
@@ -442,41 +441,31 @@ namespace cAlgo {
     public class Value {
       public DateTime CreatedAt { get; set; }
       public DateTime UpdatedAt { get; set; }
+      public String Name { get; set; }
       public Timing Timing { get; set; }
       public String Symbol { get; set; }
-      public int Macd { get; set; }
-      public int Vcn { get; set; }
+      public Int32 Val { get; set; }
 
-      public Value(String symbol, Timing timing, int macd, int vcn) {
+      public Value(String name, String symbol, Timing timing, Int32 value) {
         this.CreatedAt = DateTime.Now;
         this.UpdatedAt = DateTime.Now;
 
+        this.Name = name;
         this.Symbol = symbol;
         this.Timing = timing;
-        this.Macd = macd;
-        this.Vcn = vcn;
+        this.Val = value;
+      }
+
+      public String GetKey() {
+        return String.Format("{0}-{1}", this.Symbol, this.Name);
       }
 
       public bool IsZero() {
-        return (GetPunctuation() == 0);
-      }
-      
-      public int GetPunctuation() {
-        return this.Macd * 10 + this.Vcn;
+        return (this.Val == 0);
       }
 
       public TradeType GetTradeType() {
-        return GetPunctuation() > 0 ? TradeType.Buy : TradeType.Sell;
-      }
-
-      public string GetSignalName() {
-        if (this.Macd != 0) {
-          return "MACD";
-        } else if (this.Vcn != 0) {
-          return "VCN";
-        } else {
-          return "NONE";
-        }
+        return this.Val > 0 ? TradeType.Buy : TradeType.Sell;
       }
 
       public void UpdateWith(Value other) {
@@ -484,12 +473,15 @@ namespace cAlgo {
           throw new Exception("Cant update value with not matching Symbol.");
         }
 
-        if (other.GetPunctuation() != this.GetPunctuation()) {
+        if (other.Name != this.Name) {
+          throw new Exception("Cant update value with not matching Name.");
+        }
+
+        if (other.Val != this.Val) {
           this.UpdatedAt = other.CreatedAt;
         }
 
-        this.Macd = other.Macd;
-        this.Vcn = other.Vcn;
+        this.Val = other.Val;
         this.Timing = other.Timing;
       }
     }
@@ -503,13 +495,15 @@ namespace cAlgo {
     }
 
     public void Update(Value value) {
+      var key = value.GetKey();
+
       if (value.IsZero()) {
-        local.Remove(value.Symbol);
+        local.Remove(key);
       } else {
-        if (local.ContainsKey(value.Symbol)) {
-          local[value.Symbol].UpdateWith(value);
+        if (local.ContainsKey(key)) {
+          local[key].UpdateWith(value);
         } else {
-          local.Add(value.Symbol, value);
+          local.Add(key, value);
         }
       }
     }
@@ -519,7 +513,7 @@ namespace cAlgo {
 
       output += string.Format("\tUpdated at: {0}\r\n\r\n", DateTime.Now.ToString("yyyy - MM - dd HH: mm:ss"));
       output += string.Format("\tTime Frame: {0}\r\n\r\n", timeFrame.AsString());
-      output += string.Format("\t{0,-10}\t{1,-8}\t{2,-8}\t{3,-8}\t{4,-20}\r\n", "Symbol", "TM",  "MACD", "VCN", "Created At");
+      output += string.Format("\t{0,-10}\t{1,-8}\t{2,-8}\t{3,-8}\t{4,-20}\r\n", "Symbol", "TM",  "ST", "PT", "Created At");
       output += "\t----------------------------------------------------------------------------------------------------------\r\n";
 
       foreach (var item in local.ToList().OrderBy(o => o.Value.CreatedAt).Reverse()) {
@@ -528,9 +522,9 @@ namespace cAlgo {
         var timing = value.Timing;
 
         var timingStr = string.Format("{0,2},{1,2}", timing.Reference, timing.Local);
-        var macdStr = string.Format("{0,2}", value.Macd);
-        var vcnStr = string.Format("{0,2}", value.Vcn);
-        output += string.Format("\t{0,-10}\t{1,-8}\t{2,-8}\t{3,-8}\t{4,-20}\r\n", key, timingStr, macdStr, vcnStr, value.CreatedAt.TimeAgo());
+        var stStr = string.Format("{0,4}", value.Name);
+        var ptstr = string.Format("{0,2}", value.Val);
+        output += string.Format("\t{0,-10}\t{1,-8}\t{2,-8}\t{3,-8}\t{4,-20}\r\n", value.Symbol, timingStr, stStr, ptstr, value.CreatedAt.TimeAgo());
       }
 
       return output;
