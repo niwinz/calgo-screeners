@@ -511,7 +511,7 @@ namespace cAlgo {
     public string Render() {
       var output = "";
 
-      output += string.Format("\tUpdated at: {0}\r\n\r\n", DateTime.Now.ToString("yyyy - MM - dd HH: mm:ss"));
+      output += string.Format("\tUpdated at: {0}\r\n\r\n", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
       output += string.Format("\tTime Frame: {0}\r\n\r\n", timeFrame.AsString());
       output += string.Format("\t{0,-10}\t{1,-8}\t{2,-8}\t{3,-8}\t{4,-20}\r\n", "Symbol", "TM",  "ST", "PT", "Created At");
       output += "\t----------------------------------------------------------------------------------------------------------\r\n";
