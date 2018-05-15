@@ -80,11 +80,14 @@ namespace cAlgo {
     [Parameter("Time Frame")]
     public TimeFrame TFrame { get; set; }
 
-    [Parameter("Enable MACD?", DefaultValue = true)]
-    public Boolean EnableMacd { get; set; }
+    [Parameter("Enable Pull Back Signals?", DefaultValue = true)]
+    public Boolean EnablePB { get; set; }
 
-    [Parameter("Enable VCN?", DefaultValue = false)]
-    public Boolean EnableVcn { get; set; }
+    //[Parameter("Enable ACC?", DefaultValue = false)]
+    //public Boolean EnableAcc { get; set; }
+
+    //[Parameter("Enable VCN?", DefaultValue = false)]
+    //public Boolean EnableVcn { get; set; }
 
     [Parameter("Enable email alerts?", DefaultValue = false)]
     public Boolean EnableEmailAlerts { get; set; }
@@ -93,65 +96,46 @@ namespace cAlgo {
     public Boolean EnableSoundAlerts { get; set; }
 
     private String[] symbols = new String[] {
+      // Main Currency Pairs
       "EURUSD",
       "GBPUSD",
-      "EURJPY",
-      "USDJPY",
-      "AUDUSD",
-      "USDCHF",
-      "GBPJPY",
-      "USDCAD",
-      "EURGBP",
-      "EURCHF",
-      "AUDJPY",
       "NZDUSD",
-      "CHFJPY",
-      "EURAUD",
-      "CADJPY",
-      "GBPAUD",
-      "EURCAD",
-      "AUDCAD",
-      "GBPCHF",
-      "AUDCHF",
-      "GBPCAD",
-      "GBPNZD",
-      "NZDCAD",
-      "NZDCHF",
+      "AUDUSD",
+      "USDJPY",
+      "USDCHF",
+      "USDCAD",
+
+      // Personal Preference
       "NZDJPY",
+      "NZDCAD",
+      "AUDCAD",
       "AUDNZD",
-      "CADCHF",
-      "EURNZD",
-      "XAUUSD",
-      "BTCUSD",
+      "AUDJPY",
+      "EURJPY",
+      "EURAUD",
+     
+      // Indexes
       "USTEC",
-      "US30",
       "US500",
-      "UK100",
-      "ES35",
-      "JP225",
       "DE30",
       "STOXX50",
-      "AUS200",
-      // "XTIUSD" 
     };
 
-    private String AlertSoundPath = "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-1.wav";
+    private Dictionary<String, String> spaths;
 
     private Dictionary<String, MarketSeries> lseries;
     private Dictionary<String, MarketSeries> rseries;
 
-    private Dictionary<String, ExponentialMovingAverage> lmm8;
-    private Dictionary<String, WeightedMovingAverage> lmm50;
-    private Dictionary<String, WeightedMovingAverage> lmm150;
-    private Dictionary<String, WeightedMovingAverage> lmm300;
-    private Dictionary<String, WeightedMovingAverage> rmm150;
-    private Dictionary<String, WeightedMovingAverage> rmm300;
+    private Dictionary<String, ExponentialMovingAverage> lmm6;
+    private Dictionary<String, ExponentialMovingAverage> lmm18;
+    private Dictionary<String, ExponentialMovingAverage> lmm50;
+    private Dictionary<String, ExponentialMovingAverage> lmm100;
+    private Dictionary<String, ExponentialMovingAverage> rmm100;
+    private Dictionary<String, SimpleMovingAverage> lmm200;
+    private Dictionary<String, SimpleMovingAverage> rmm200;
 
     private Dictionary<String, MacdCrossOver> lmacd;
     private Dictionary<String, MacdCrossOver> rmacd;
-
-    private Dictionary<String, AverageTrueRange> latr;
-
 
     private State state;
 
@@ -161,17 +145,22 @@ namespace cAlgo {
       lseries = new Dictionary<string, MarketSeries>();
       rseries = new Dictionary<string, MarketSeries>();
 
-      lmm8 = new Dictionary<string, ExponentialMovingAverage>();
-      lmm50 = new Dictionary<string, WeightedMovingAverage>();
-      lmm150 = new Dictionary<string, WeightedMovingAverage>();
-      lmm300 = new Dictionary<string, WeightedMovingAverage>();
-      rmm150 = new Dictionary<string, WeightedMovingAverage>();
-      rmm300 = new Dictionary<string, WeightedMovingAverage>();
+      lmm6 = new Dictionary<string, ExponentialMovingAverage>();
+      lmm18 = new Dictionary<string, ExponentialMovingAverage>();
+      lmm50 = new Dictionary<string, ExponentialMovingAverage>();
+      lmm100 = new Dictionary<string, ExponentialMovingAverage>();
+      rmm100 = new Dictionary<string, ExponentialMovingAverage>();
+
+      lmm200 = new Dictionary<string, SimpleMovingAverage>();
+      rmm200 = new Dictionary<string, SimpleMovingAverage>();
 
       lmacd = new Dictionary<string, MacdCrossOver>();
       rmacd = new Dictionary<string, MacdCrossOver>();
 
-      latr = new Dictionary<string, AverageTrueRange>();
+      spaths = new Dictionary<string, string>(3);
+      spaths.Add("MACD", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-1.wav");
+      spaths.Add("ACC", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-4.wav");
+      spaths.Add("VCN", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-3.wav");
 
       Print("Initializing screener local state.");
 
@@ -182,17 +171,18 @@ namespace cAlgo {
         var lmks = MarketData.GetSeries(sym, TFrame);
         var rmks = MarketData.GetSeries(sym, reftf);
 
-        lmm8[sym] = Indicators.ExponentialMovingAverage(lmks.Close, 8);
-        lmm50[sym] = Indicators.WeightedMovingAverage(lmks.Close, 50);
-        lmm150[sym] = Indicators.WeightedMovingAverage(lmks.Close, 150);
-        lmm300[sym] = Indicators.WeightedMovingAverage(lmks.Close, 300);
-        rmm150[sym] = Indicators.WeightedMovingAverage(rmks.Close, 150);
-        rmm300[sym] = Indicators.WeightedMovingAverage(rmks.Close, 300);
+        lmm6[sym] = Indicators.ExponentialMovingAverage(lmks.Close, 6);
+        lmm18[sym] = Indicators.ExponentialMovingAverage(lmks.Close, 18);
+
+        lmm50[sym] = Indicators.ExponentialMovingAverage(lmks.Close, 50);
+        lmm100[sym] = Indicators.ExponentialMovingAverage(lmks.Close, 100);
+        rmm100[sym] = Indicators.ExponentialMovingAverage(rmks.Close, 100);
+
+        lmm200[sym] = Indicators.SimpleMovingAverage(lmks.Close, 200);
+        rmm200[sym] = Indicators.SimpleMovingAverage(rmks.Close, 200);
 
         lmacd[sym] = Indicators.MacdCrossOver(lmks.Close, 26, 12, 9);
         rmacd[sym] = Indicators.MacdCrossOver(rmks.Close, 26, 12, 9);
-
-        latr[sym] = Indicators.AverageTrueRange(lmks, 14, MovingAverageType.Exponential);
 
         lseries[sym] = lmks;
         rseries[sym] = rmks;
@@ -209,9 +199,9 @@ namespace cAlgo {
       foreach (var sym in symbols) {
         var timing = CalculateMarketTiming(sym);
 
-        if (EnableMacd) {
-          var val = GetMacdSignal(sym, timing);
-          var value = new State.Value("MACD", sym, timing, val);
+        if (EnablePB) {
+          var val = GetPBSignal(sym, timing);
+          var value = new State.Value("PB", sym, timing, val);
           state.Update(value);
 
           if (EnableEmailAlerts) {
@@ -224,19 +214,34 @@ namespace cAlgo {
           }
         }
 
-        if (EnableVcn) {
-          var val = GetVcnSignal(sym, timing);
-          var value = new State.Value("VCN", sym, timing, val);
-          state.Update(value);
+        //if (EnableAcc) {
+        //  var val = GetAccSignal(sym, timing);
+        //  var value = new State.Value("ACC", sym, timing, val);
+        //  state.Update(value);
 
-          if (EnableEmailAlerts) {
-            HandleEmailAlerts(value);
-          }
+        //  if (EnableEmailAlerts) {
+        //    HandleEmailAlerts(value);
 
-          if (EnableSoundAlerts) {
-            HandleSoundAlerts(value);
-          }
-        }
+        //  }
+
+        //  if (EnableSoundAlerts) {
+        //    HandleSoundAlerts(value);
+        //  }
+        //}
+
+        //if (EnableVcn) {
+        //  var val = GetVcnSignal(sym, timing);
+        //  var value = new State.Value("VCN", sym, timing, val);
+        //  state.Update(value);
+
+        //  if (EnableEmailAlerts) {
+        //    HandleEmailAlerts(value);
+        //  }
+
+        //  if (EnableSoundAlerts) {
+        //    HandleSoundAlerts(value);
+        //  }
+        //}
       }
       
       var output = state.Render();
@@ -257,7 +262,7 @@ namespace cAlgo {
     }
 
     private int CalculateLocalTiming(String sym) {
-      if (IsTrendUp(lseries[sym], lmm300[sym])) {
+      if (IsTrendUp(lseries[sym], lmm200[sym])) {
         if (lmacd[sym].Histogram.LastValue > 0 && lmacd[sym].Signal.LastValue > 0) {
           return 1;
         } else if (lmacd[sym].Histogram.LastValue > 0 && lmacd[sym].Signal.LastValue < 0) {
@@ -281,7 +286,7 @@ namespace cAlgo {
     }
 
     private int CalculateReferenceTiming(String sym) {
-      if (IsTrendUp(rseries[sym], rmm300[sym])) {
+      if (IsTrendUp(rseries[sym], rmm200[sym])) {
         if (rmacd[sym].Histogram.LastValue > 0 && rmacd[sym].Signal.LastValue > 0) {
           return 1;
         } else if (rmacd[sym].Histogram.LastValue > 0 && rmacd[sym].Signal.LastValue < 0) {
@@ -304,23 +309,25 @@ namespace cAlgo {
       }
     }
 
-    private TimeFrame GetReferenceTimeframe(TimeFrame tf) {
+    public TimeFrame GetReferenceTimeframe(TimeFrame tf) {
       if (tf == TimeFrame.Hour) {
         return TimeFrame.Daily;
-      } else if (tf == TimeFrame.Minute5) {
+      } else if (tf == TimeFrame.Minute5 || tf == TimeFrame.Minute) {
         return TimeFrame.Hour;
+      } else if (tf == TimeFrame.Minute15) {
+        return TimeFrame.Hour4;
       } else if (tf == TimeFrame.Daily) {
         return TimeFrame.Weekly;
       } else if (tf == TimeFrame.Weekly) {
         return TimeFrame.Weekly;
       } else {
-        return TimeFrame.Hour;
+        return TimeFrame.Daily;
       }
     }
 
-    private bool IsTrendUp(MarketSeries series, WeightedMovingAverage wma) {
+    private bool IsTrendUp(MarketSeries series, SimpleMovingAverage ma) {
       var close = series.Close.LastValue;
-      var value = wma.Result.LastValue;
+      var value = ma.Result.LastValue;
 
       if (value < close) {
         return true;
@@ -333,19 +340,18 @@ namespace cAlgo {
     // ----  MACD
     // -------------------------------------------
 
-    public int GetMacdSignal(string sym, Timing timing) {
+    public int GetPBSignal(string sym, Timing timing) {
       var series = lseries[sym];
-      var wma50 = lmm50[sym];
-      var wma150 = lmm150[sym];
-      var wma300 = lmm300[sym];
+      var mm50 = lmm50[sym];
+      var mm100 = lmm100[sym];
+      var mm200 = lmm200[sym];
       var macd = lmacd[sym];
 
-      
-      if (wma150.Result.LastValue > wma300.Result.LastValue
-          && wma150.Result.Last(1) > wma300.Result.Last(1)
+      if (mm100.Result.LastValue > mm200.Result.LastValue
+          && mm100.Result.Last(1) > mm200.Result.Last(1)
+          && mm50.Result.LastValue > mm200.Result.LastValue
           && timing.Reference.In(1, 4, -2, -3)
-          && series.Low.LastValue <= wma150.Result.LastValue
-          && macd.Signal.LastValue < 0
+          && series.High.LastValue > mm200.Result.LastValue
           && macd.MACD.LastValue < 0) {
         if(macd.Histogram.LastValue <= 0) {
           return 1;
@@ -354,41 +360,17 @@ namespace cAlgo {
         }
       }
 
-      if (wma150.Result.LastValue < wma300.Result.LastValue
-          && wma150.Result.Last(1) < wma300.Result.Last(1)
+      if (mm100.Result.LastValue < mm200.Result.LastValue
+          && mm100.Result.Last(1) < mm200.Result.Last(1)
+          && mm50.Result.LastValue < mm200.Result.LastValue
           && timing.Reference.In(-1, -4, 2, 3)
-          && series.High.LastValue >= wma150.Result.LastValue
-          && macd.Signal.LastValue > 0
+          && series.Low.LastValue < mm200.Result.LastValue
           && macd.MACD.LastValue > 0) {
         if (macd.Histogram.LastValue >= 0) {
           return 1;
         } else {
           return 2;
         }
-      }
-
-      return 0;
-    }
-
-    public int GetVcnSignal(String sym, Timing timing) {
-      var series = lseries[sym];
-      var wma150 = lmm150[sym];
-      var ema8 = lmm8[sym];
-
-      if (timing.Reference.In(1, 4)
-          && timing.Local.In(1, 4)
-          && series.Low.Last(1) > ema8.Result.Last(1)
-          && series.Low.Last(2) > ema8.Result.Last(2)
-          && series.Low.LastValue <= ema8.Result.LastValue) {
-        return 2;
-      }
-
-      if (timing.Reference.In(-1, -4)
-          && timing.Local.In(-1, -4)
-          && series.High.Last(1) < ema8.Result.Last(1)
-          && series.High.Last(2) < ema8.Result.Last(2)
-          && series.High.LastValue >= ema8.Result.LastValue) {
-        return -2;
       }
 
       return 0;
@@ -431,7 +413,7 @@ namespace cAlgo {
         var candidate = (int)Registry.GetValue(keyName, subkey, 0);
         if ((value.Val > candidate && candidate >= 0) || (value.Val < candidate && candidate <= 0)) {
           Registry.SetValue(keyName, subkey, value.Val);
-          Notifications.PlaySound(AlertSoundPath);
+          Notifications.PlaySound(spaths[value.Name]);
         }
       }
     }

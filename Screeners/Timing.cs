@@ -10,12 +10,20 @@ using cAlgo.API.Indicators;
 
 namespace cAlgo.Indicators {
   [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-  public class Timing : Indicator {
+  public class TimingIndicator : Indicator {
+    public class Timing : Tuple<Int32, Int32> {
+      public Int32 Reference { get { return Item1; } }
+      public Int32 Local { get { return Item2; } }
+
+      public Timing(int reference, int local) : base(reference, local) {
+      }
+    }
+
     private MacdCrossOver lmacd;
     private MacdCrossOver rmacd;
 
-    private WeightedMovingAverage lwma;
-    private WeightedMovingAverage rwma;
+    private WeightedMovingAverage lma;
+    private WeightedMovingAverage rma;
 
     private MarketSeries rseries;
     private TimeFrame reftf;
@@ -30,8 +38,8 @@ namespace cAlgo.Indicators {
       lmacd = Indicators.MacdCrossOver(MarketSeries.Close, 26, 12, 9);
       rmacd = Indicators.MacdCrossOver(rseries.Close, 26, 12, 9);
 
-      lwma = Indicators.WeightedMovingAverage(MarketSeries.Close, 300);
-      rwma = Indicators.WeightedMovingAverage(rseries.Close, 300);
+      lma = Indicators.WeightedMovingAverage(MarketSeries.Close, 200);
+      rma = Indicators.WeightedMovingAverage(rseries.Close, 200);
 
       Print("Load reference time frame: {0}", reftf);
 
@@ -39,81 +47,46 @@ namespace cAlgo.Indicators {
       Local = CreateDataSeries();
 
       var result = CalculateMarketTiming();
-      Reference[MarketSeries.Close.Count - 1] = result.Item1;
-      Local[MarketSeries.Close.Count - 1] = result.Item2;
+      Reference[MarketSeries.Close.Count - 1] = result.Reference;
+      Local[MarketSeries.Close.Count - 1] = result.Local;
     }
 
     public override void Calculate(int index) {
       if (IsRealTime) {
         var result = CalculateMarketTiming();
-        Reference[index] = result.Item1;
-        Local[index] = result.Item2;
+        Reference[index] = result.Reference;
+        Local[index] = result.Local;
       }
     }
 
-    private Tuple<int, int> CalculateMarketTiming() {
-      var local = CalculateLocalTiming();
-      var reference = CalculateReferenceTiming();
+    private Timing CalculateMarketTiming() {
+      var local = CalculateTiming(lmacd, lma, MarketSeries);
+      var reference = CalculateTiming(rmacd, rma, rseries);
 
       var msg = string.Format("Market timing: {0} {1}", reference, local);
       ChartObjects.RemoveObject("test");
       ChartObjects.DrawText("test", msg, StaticPosition.TopCenter, Colors.Black);
 
-      return new Tuple<int, int>(reference, local);
+      return new Timing(reference, local);
     }
 
-    private bool IsTrendUp(MarketSeries series, WeightedMovingAverage wma) {
-      var close = series.Close.LastValue;
-      var value = wma.Result.LastValue;
-
-      if (value < close) {
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    public int CalculateLocalTiming() {
-      if (IsTrendUp(MarketSeries, lwma)) {
-        if (lmacd.Histogram.LastValue > 0 && lmacd.Signal.LastValue > 0) {
+    private int CalculateTiming(MacdCrossOver macd, WeightedMovingAverage wma, MarketSeries series) {
+      if (IsTrendUp(series, wma)) {
+        if (macd.Histogram.LastValue > 0 && macd.Signal.LastValue > 0) {
           return 1;
-        } else if (lmacd.Histogram.LastValue > 0 && lmacd.Signal.LastValue < 0) {
+        } else if (macd.Histogram.LastValue > 0 && macd.Signal.LastValue < 0) {
           return 4;
-        } else if (lmacd.Histogram.LastValue <= 0 && lmacd.Signal.LastValue >= 0) {
+        } else if (macd.Histogram.LastValue <= 0 && macd.Signal.LastValue >= 0) {
           return 2;
         } else {
           return 3;
         }
       } else {
-        if (lmacd.Histogram.LastValue < 0 && lmacd.Signal.LastValue < 0) {
+        if (macd.Histogram.LastValue < 0 && macd.Signal.LastValue < 0) {
           return -1;
-        } else if (lmacd.Histogram.LastValue < 0 && lmacd.Signal.LastValue > 0) {
+        } else if (macd.Histogram.LastValue < 0 && macd.Signal.LastValue > 0) {
           return -4;
-        } else if (lmacd.Histogram.LastValue >= 0 && lmacd.Signal.LastValue <= 0) {
-          return -2;
-        } else {
-          return -3;
-        }
-      }
-    }
-
-    public int CalculateReferenceTiming() {
-      if (IsTrendUp(rseries, rwma)) {
-        if (rmacd.Histogram.LastValue > 0 && rmacd.Signal.LastValue > 0) {
-          return 1;
-        } else if (rmacd.Histogram.LastValue > 0 && rmacd.Signal.LastValue < 0) {
-          return 4;
-        } else if (rmacd.Histogram.LastValue <= 0 && rmacd.Signal.LastValue >= 0) {
-          return 2;
-        } else {
-          return 3;
-        }
-      } else {
-        if (rmacd.Histogram.LastValue < 0 && rmacd.Signal.LastValue < 0) {
-          return -1;
-        } else if (rmacd.Histogram.LastValue < 0 && rmacd.Signal.LastValue > 0) {
-          return -4;
-        } else if (rmacd.Histogram.LastValue >= 0 && rmacd.Signal.LastValue <= 0) {
+        } else if (macd.Histogram.LastValue >= 0 && macd.Signal.LastValue <= 0) {
           return -2;
         } else {
           return -3;
@@ -122,16 +95,31 @@ namespace cAlgo.Indicators {
     }
 
     public TimeFrame GetReferenceTimeframe(TimeFrame tf) {
-      if (tf == TimeFrame.Hour) {
-        return TimeFrame.Daily;
-      } else if (tf == TimeFrame.Minute5) {
+      if (tf == TimeFrame.Minute5 || tf == TimeFrame.Minute) {
         return TimeFrame.Hour;
-      } else if (tf == TimeFrame.Daily) {
+      } else if (tf == TimeFrame.Minute15) {
+        return TimeFrame.Hour4;
+      } else if (tf == TimeFrame.Hour) {
+        return TimeFrame.Daily;
+      } else if (tf == TimeFrame.Hour4) {
+        return TimeFrame.Daily;
+      } else if (tf == TimeFrame.Day2) {
         return TimeFrame.Weekly;
       } else if (tf == TimeFrame.Weekly) {
         return TimeFrame.Weekly;
       } else {
-        return TimeFrame.Hour;
+        throw new Exception("Timeframe not supported.");
+      }
+    }
+
+    private bool IsTrendUp(MarketSeries series, WeightedMovingAverage ma) {
+      var close = series.Close.LastValue;
+      var value = ma.Result.LastValue;
+
+      if (value < close) {
+        return true;
+      } else {
+        return false;
       }
     }
   }
