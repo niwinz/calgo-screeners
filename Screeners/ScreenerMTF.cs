@@ -21,14 +21,17 @@ namespace cAlgo {
     [Parameter("PullBack Signals?", DefaultValue = true)]
     public bool EnablePB { get; set; }
 
-    [Parameter("PullBack Time Frames" , DefaultValue = "H1,H4")]
-    public string EnablePBTimeFrames { get; set; }
+    [Parameter("PullBack Time Frames" , DefaultValue = "H1,H4,D1")]
+    public string PBTimeFrames { get; set; }
 
     [Parameter("MMX Signals?", DefaultValue = false)]
     public bool EnableMMX { get; set; }
 
-    [Parameter("MMX Time Frames?", DefaultValue = "M1,M5,M15,H1,H4")]
-    public string EnableMMXTimeFrames { get; set; }
+    [Parameter("MMX Time Frames?", DefaultValue = "M5,H1")]
+    public string MMXTimeFrames { get; set; }
+
+    [Parameter("MMX Periods?", DefaultValue = 24)]
+    public int MMXPeriods { get; set; }
 
     [Parameter("Enable email alerts?", DefaultValue = false)]
     public Boolean EnableEmailAlerts { get; set; }
@@ -69,10 +72,7 @@ namespace cAlgo {
     private Dictionary<TimeFrame, Dictionary<String, MarketSeries>> lseries;
     private Dictionary<TimeFrame, Dictionary<String, MarketSeries>> rseries;
 
-    private Dictionary<TimeFrame, Dictionary<String, ExponentialMovingAverage>> lmm6;
-    private Dictionary<TimeFrame, Dictionary<String, ExponentialMovingAverage>> lmm18;
     private Dictionary<TimeFrame, Dictionary<String, ExponentialMovingAverage>> lmm50;
-    private Dictionary<TimeFrame, Dictionary<String, ExponentialMovingAverage>> lmm100;
     private Dictionary<TimeFrame, Dictionary<String, WeightedMovingAverage>> lmm200;
     private Dictionary<TimeFrame, Dictionary<String, WeightedMovingAverage>> rmm200;
 
@@ -86,13 +86,13 @@ namespace cAlgo {
 
 
       if (EnablePB) {
-        foreach (var item in ParseTimeFrames(EnablePBTimeFrames)) {
+        foreach (var item in ParseTimeFrames(PBTimeFrames)) {
           bundle.Add(item);
         }
       }
 
       if (EnableMMX) {
-        foreach (var item in ParseTimeFrames(EnableMMXTimeFrames)) {
+        foreach (var item in ParseTimeFrames(MMXTimeFrames)) {
           bundle.Add(item);
         }
       }
@@ -106,22 +106,18 @@ namespace cAlgo {
       lseries = new Dictionary<TimeFrame, Dictionary<string, MarketSeries>>();
       rseries = new Dictionary<TimeFrame, Dictionary<string, MarketSeries>>();
 
-      lmm6 = new Dictionary<TimeFrame, Dictionary<string, ExponentialMovingAverage>>();
-      lmm18 = new Dictionary<TimeFrame, Dictionary<string, ExponentialMovingAverage>>();
       lmm50 = new Dictionary<TimeFrame, Dictionary<string, ExponentialMovingAverage>>();
-
-      lmm100 = new Dictionary<TimeFrame, Dictionary<string, ExponentialMovingAverage>>();
-
       lmm200 = new Dictionary<TimeFrame, Dictionary<string, WeightedMovingAverage>>();
       rmm200 = new Dictionary<TimeFrame, Dictionary<string, WeightedMovingAverage>>();
 
       lmacd = new Dictionary<TimeFrame, Dictionary<string, MacdCrossOver>>();
       rmacd = new Dictionary<TimeFrame, Dictionary<string, MacdCrossOver>>();
 
-      spaths = new Dictionary<string, string>(3);
-      spaths.Add("MACD", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-1.wav");
-      spaths.Add("ACC", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-4.wav");
-      spaths.Add("VCN", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-3.wav");
+      spaths = new Dictionary<string, string>(3) {
+        { "PB", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-1.wav" },
+        { "MMX", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-4.wav" },
+        { "VCN", "C:\\Users\\Andrey\\Music\\Sounds\\sms-alert-3.wav" }
+      };
 
       Print("Initializing screener local state.");
 
@@ -137,10 +133,7 @@ namespace cAlgo {
     }
 
     private void InitializeIndicators(TimeFrame tf) {
-      lmm6[tf] = new Dictionary<string, ExponentialMovingAverage>();
-      lmm18[tf] = new Dictionary<string, ExponentialMovingAverage>();
       lmm50[tf] = new Dictionary<string, ExponentialMovingAverage>();
-      lmm100[tf] = new Dictionary<string, ExponentialMovingAverage>();
       lmm200[tf] = new Dictionary<string, WeightedMovingAverage>();
       rmm200[tf] = new Dictionary<string, WeightedMovingAverage>();
 
@@ -157,11 +150,7 @@ namespace cAlgo {
         var lmks = MarketData.GetSeries(sym, tf);
         var rmks = MarketData.GetSeries(sym, reftf);
 
-        lmm6[tf][sym] = Indicators.ExponentialMovingAverage(lmks.Close, 6);
-        lmm18[tf][sym] = Indicators.ExponentialMovingAverage(lmks.Close, 18);
-
         lmm50[tf][sym] = Indicators.ExponentialMovingAverage(lmks.Close, 50);
-        lmm100[tf][sym] = Indicators.ExponentialMovingAverage(lmks.Close, 100);
 
         lmm200[tf][sym] = Indicators.WeightedMovingAverage(lmks.Close, 200);
         rmm200[tf][sym] = Indicators.WeightedMovingAverage(rmks.Close, 200);
@@ -177,7 +166,7 @@ namespace cAlgo {
     protected override void OnBar() {
       // PB Signals
       if (EnablePB) {
-        foreach (var tf in ParseTimeFrames(EnablePBTimeFrames)) {
+        foreach (var tf in ParseTimeFrames(PBTimeFrames)) {
           foreach (var sym in symbols) {
             var timing = CalculateMarketTiming(sym, tf);
             var val = GetPBSignal(sym, tf, timing);
@@ -198,7 +187,7 @@ namespace cAlgo {
 
       // MMX Signals
       if (EnableMMX) {
-        foreach (var tf in ParseTimeFrames(EnablePBTimeFrames)) {
+        foreach (var tf in ParseTimeFrames(MMXTimeFrames)) {
           foreach (var sym in symbols) {
             var timing = CalculateMarketTiming(sym, tf);
             var val = GetMMXSignal(sym, tf, timing);
@@ -260,16 +249,16 @@ namespace cAlgo {
       var mm50 = lmm50[tf][sym];
       var mm200 = lmm200[tf][sym];
 
-
       var hasCrossedAbove = false;
       var hasCrossedBelow = false;
+      var periods = MMXPeriods;
 
-      for (int i = 1; i < 5; i++) {
+      for (int i = 1; i < periods; i++) {
         hasCrossedAbove = mm50.Result.HasCrossedAbove(mm200.Result, i);
         if (hasCrossedAbove == true) break;
       }
 
-      for (int i = 1; i < 5; i++) {
+      for (int i = 1; i < periods; i++) {
         hasCrossedBelow = mm50.Result.HasCrossedBelow(mm200.Result, i);
         if (hasCrossedBelow == true) break;
       }
