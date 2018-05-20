@@ -40,6 +40,7 @@ namespace cAlgo {
     public Boolean EnableSoundAlerts { get; set; }
 
     private String[] symbols = new String[] {
+      // Forex
       "AUDNZD",
       "CADJPY",
       "AUDJPY",
@@ -60,11 +61,17 @@ namespace cAlgo {
       "USDJPY",
       "AUDCAD",
       "EURAUD",
-      "US500",
-      "DE30",
       "GBPCHF",
       "XAUUSD",
       "NZDCHF",
+      "GBPNZD",
+      "NZDCAD",
+
+      // Indexes
+      "US500",
+      "USTEC",
+      "DE30",
+      "ES35",
     };
 
     private Dictionary<String, String> spaths;
@@ -331,7 +338,6 @@ namespace cAlgo {
         return TimeFrame.Monthly;
       } else {
         throw new Exception(string.Format("GetReferenceTimeFrame: timeframe {0} not supported", tf));
-
       }
     }
 

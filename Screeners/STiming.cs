@@ -10,7 +10,7 @@ using cAlgo.API.Indicators;
 
 namespace cAlgo.Indicators {
   [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-  public class TimingIndicator : Indicator {
+  public class SimplifiedTimingIndicator : Indicator {
     public class Timing : Tuple<Int32, Int32> {
       public Int32 Reference { get { return Item1; } }
       public Int32 Local { get { return Item2; } }
@@ -63,7 +63,7 @@ namespace cAlgo.Indicators {
       var local = CalculateTiming(lmacd, lma, MarketSeries);
       var reference = CalculateTiming(rmacd, rma, rseries);
 
-      var msg = string.Format("Market timing: {0} {1}", reference, local);
+      var msg = string.Format("Timing: {0} {1}", reference, local);
       ChartObjects.RemoveObject("test");
       ChartObjects.DrawText("test", msg, StaticPosition.TopCenter, Colors.Black);
 
@@ -72,24 +72,16 @@ namespace cAlgo.Indicators {
 
     private int CalculateTiming(MacdCrossOver macd, WeightedMovingAverage wma, MarketSeries series) {
       if (IsTrendUp(series, wma)) {
-        if (macd.Histogram.LastValue > 0 && macd.Signal.LastValue > 0) {
+        if (macd.Histogram.LastValue > 0) {
           return 1;
-        } else if (macd.Histogram.LastValue > 0 && macd.Signal.LastValue < 0) {
-          return 4;
-        } else if (macd.Histogram.LastValue <= 0 && macd.Signal.LastValue >= 0) {
-          return 2;
         } else {
-          return 3;
+          return 2;
         }
       } else {
-        if (macd.Histogram.LastValue < 0 && macd.Signal.LastValue < 0) {
+        if (macd.Histogram.LastValue <= 0) {
           return -1;
-        } else if (macd.Histogram.LastValue < 0 && macd.Signal.LastValue > 0) {
-          return -4;
-        } else if (macd.Histogram.LastValue >= 0 && macd.Signal.LastValue <= 0) {
+        }  else {
           return -2;
-        } else {
-          return -3;
         }
       }
     }
