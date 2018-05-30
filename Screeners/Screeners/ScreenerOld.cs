@@ -72,7 +72,7 @@ namespace cAlgo {
   }
 
   [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.Registry)]
-  public class Screener : Robot {
+  public class ScreenerOld : Robot {
 
     [Parameter("Source")]
     public DataSeries Source { get; set; }

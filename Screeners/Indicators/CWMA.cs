@@ -10,22 +10,30 @@ using cAlgo.API.Indicators;
 
 namespace cAlgo.Indicators {
   [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-  public class GeneralTendence : Indicator {
-    private WeightedMovingAverage wma150;
-    private string dotchar = "▪";
+  public class CWMA : Indicator {
+    private WeightedMovingAverage wma;
+
+    [Parameter("Period", DefaultValue = 150)]
+    public int Period { get; set; }
+
+    [Output("Up Trend", PlotType = PlotType.DiscontinuousLine, Color = Colors.Green)]
+    public IndicatorDataSeries UpTrend { get; set; }
+
+    [Output("Down Trend", PlotType = PlotType.DiscontinuousLine, Color = Colors.Red)]
+    public IndicatorDataSeries DownTrend { get; set; }
 
     protected override void Initialize() {
-      wma150 = Indicators.WeightedMovingAverage(MarketSeries.Close, 150);
+      wma = Indicators.WeightedMovingAverage(MarketSeries.Close, Period);
     }
 
     public override void Calculate(int index) {
       var close = MarketSeries.Close[index];
-      var value = wma150.Result[index];
+      var value = wma.Result[index];
 
       if (value < close) {
-        ChartObjects.DrawText(string.Format("up-{0}", index), dotchar, index, value, VerticalAlignment.Center, HorizontalAlignment.Center, Colors.Green);
+        UpTrend[index] = value;
       } else {
-        ChartObjects.DrawText(string.Format("down-{0}", index), dotchar, index, value, VerticalAlignment.Center, HorizontalAlignment.Center, Colors.Red);
+        DownTrend[index] = value;
       }
     }
   }

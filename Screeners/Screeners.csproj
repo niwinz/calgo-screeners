@@ -25,7 +25,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="cAlgo.API">
-      <HintPath>..\..\..\..\Documents\cAlgo\API\cAlgo.API.dll</HintPath>
+      <HintPath>..\..\..\..\Desktop\cAlgo.API.dll</HintPath>
     </Reference>
   </ItemGroup>
  </Project>
