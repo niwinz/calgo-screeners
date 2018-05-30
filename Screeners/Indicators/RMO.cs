@@ -3,7 +3,7 @@ using cAlgo.API;
 using cAlgo.API.Indicators;
 
 namespace cAlgo.Indicators {
-  [Levels(-7, 7)]
+  //[Levels(-7, 7)]
   [Indicator(AccessRights = AccessRights.None)]
   public class RMO : Indicator {
 

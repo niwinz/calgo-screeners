@@ -10,7 +10,7 @@ using cAlgo.API.Indicators;
 
 namespace cAlgo.Indicators {
   [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-  public class SimplifiedTimingIndicator : Indicator {
+  public class Timing : Indicator {
 
     [Parameter("Enable ATR INFO?", DefaultValue = true)]
     public bool EnableATRInfo { get; set; }
