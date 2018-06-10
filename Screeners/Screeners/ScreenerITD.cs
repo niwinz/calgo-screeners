@@ -29,6 +29,10 @@ namespace cAlgo {
     [Parameter("PullBack H1?", DefaultValue = true)]
     public bool EnablePBgH1 { get; set; }
 
+    [Parameter("Events Bus?", DefaultValue = true)]
+    public bool EnableEventsBus { get; set; }
+
+
     //[Parameter("Enable email alerts?", DefaultValue = false)]
     //public Boolean EnableEmailAlerts { get; set; }
 
@@ -92,7 +96,7 @@ namespace cAlgo {
     private Dictionary<String, MacdCrossOver> macd_CR;
 
     private State state;
-    private PublisherSocket server;
+    private EventsBus Bus;
 
     protected override void OnStart() {
       Print("Initializing screener local state.");
@@ -134,6 +138,7 @@ namespace cAlgo {
       macd_CR = new Dictionary<string, MacdCrossOver>();
 
       state = new State();
+      Bus = new EventsBus("tcp://*:8888");
 
       foreach (var sym in symbols) {
         Print("Initializing data for {0}", sym);
@@ -194,8 +199,12 @@ namespace cAlgo {
 
       Print("Initialization finished.");
 
-      InitializeServer();
-      server.SendMoreFrame("update").SendFrame(state.ToJson());
+      if (EnableEventsBus) {
+        Print("Starting event bus.");
+        Bus.Start();
+      }
+
+      Bus.Emit(state.ToJson());
 
       //using (StreamWriter sw = new StreamWriter(@"C:\Users\Andrey\Desktop\json.txt")) {
       //  sw.Write(state.ToJson());
@@ -204,17 +213,8 @@ namespace cAlgo {
       Render();
     }
 
-    private void InitializeServer() {
-      Print("Start publisher server.");
-      server = new PublisherSocket();
-      server.Options.SendHighWatermark = 1000;
-      server.Bind("tcp://*:7777");
-
-      Print("Server started.");
-    }
-
     protected override void OnStop() {
-      server.Close();
+      Bus.Stop();
       Print("Bot stopped.");
     }
 
@@ -239,7 +239,7 @@ namespace cAlgo {
       }
 
       Render();
-      server.SendMoreFrame("update").SendFrame(state.ToJson());
+      Bus.Emit(state.ToJson());
     }
 
     // -------------------------------------------
@@ -403,6 +403,41 @@ namespace cAlgo {
     //}
 
     // -------------------------------------------
+    // ----  Event Bus
+    // -------------------------------------------
+
+    public class EventsBus {
+      private PublisherSocket Server;
+      private String BindAddress;
+      private Boolean Started = false;
+
+      public EventsBus(String bind) {
+        Server = new PublisherSocket();
+        Server.Options.SendHighWatermark = 5000;
+
+        BindAddress = bind;
+      }
+
+      public void Start() {
+        Server.Bind(BindAddress);
+        Started = true;
+      }
+
+      public void Stop() {
+        if (Started) {
+          Started = false;
+          Server.Close();
+        }
+      }
+
+      public void Emit(String msg) {
+        if (Started) {
+          Server.SendMoreFrame("update").SendFrame(msg);
+        }
+      }
+    }
+
+    // -------------------------------------------
     // ----  Internal State
     // -------------------------------------------
 
@@ -527,7 +562,6 @@ namespace cAlgo {
                                       timing.Data[TimeFrame.Hour4],
                                       timing.Data[TimeFrame.Hour],
                                       timing.Data[TimeFrame.Minute5]);
-
 
         var signalsOutput = new HashSet<String>();
         foreach (var signal in asset.GetSignals()) {
