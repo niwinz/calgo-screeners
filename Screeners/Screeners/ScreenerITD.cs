@@ -5,16 +5,20 @@
 // Copyright (c) 2018 Andrey Antukh <niwi@niwi.nz>
 
 using System;
+using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using cAlgo.API;
 using cAlgo.API.Internals;
 using cAlgo.API.Indicators;
-using Microsoft.Win32;
+using NetMQ;
+using NetMQ.Sockets;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json;
 
 namespace cAlgo {
-  [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.Registry)]
+  [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.FullAccess)]
   public class ScreenerITD : Robot {
     //[Parameter("Source")]
     //public DataSeries Source { get; set; }
@@ -88,6 +92,7 @@ namespace cAlgo {
     private Dictionary<String, MacdCrossOver> macd_CR;
 
     private State state;
+    private PublisherSocket server;
 
     protected override void OnStart() {
       Print("Initializing screener local state.");
@@ -129,7 +134,7 @@ namespace cAlgo {
       macd_CR = new Dictionary<string, MacdCrossOver>();
 
       state = new State();
-      
+
       foreach (var sym in symbols) {
         Print("Initializing data for {0}", sym);
 
@@ -188,7 +193,29 @@ namespace cAlgo {
       };
 
       Print("Initialization finished.");
+
+      InitializeServer();
+      server.SendMoreFrame("update").SendFrame(state.ToJson());
+
+      //using (StreamWriter sw = new StreamWriter(@"C:\Users\Andrey\Desktop\json.txt")) {
+      //  sw.Write(state.ToJson());
+      //}
+
       Render();
+    }
+
+    private void InitializeServer() {
+      Print("Start publisher server.");
+      server = new PublisherSocket();
+      server.Options.SendHighWatermark = 1000;
+      server.Bind("tcp://*:7777");
+
+      Print("Server started.");
+    }
+
+    protected override void OnStop() {
+      server.Close();
+      Print("Bot stopped.");
     }
 
     private void UpdateTiming() {
@@ -212,6 +239,7 @@ namespace cAlgo {
       }
 
       Render();
+      server.SendMoreFrame("update").SendFrame(state.ToJson());
     }
 
     // -------------------------------------------
@@ -446,7 +474,7 @@ namespace cAlgo {
     }
 
     public class State {
-      private OrderedDictionary Data;
+      public OrderedDictionary Data { get; set; }
 
       public State() {
         Data = new OrderedDictionary();
@@ -464,8 +492,22 @@ namespace cAlgo {
         var asset = GetAsset(key);
         asset.Timing = value;
       }
-    }
 
+
+      public String ToJson() {
+        JsonSerializer serializer = new JsonSerializer();
+        serializer.Converters.Add(new JavaScriptDateTimeConverter());
+        serializer.NullValueHandling = NullValueHandling.Ignore;
+        serializer.Formatting = Formatting.Indented;
+
+        var buffer = new StringWriter();
+
+        using (buffer = new StringWriter()) {
+          serializer.Serialize(buffer, Data.Values);
+          return buffer.ToString();
+        }
+      }
+    }
     // -------------------------------------------
     // ----  Rendering
     // -------------------------------------------

@@ -24,6 +24,10 @@
     <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="NetMQ" Version="4.0.0.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="cAlgo.API">
       <HintPath>..\..\..\..\Desktop\cAlgo.API.dll</HintPath>
     </Reference>
