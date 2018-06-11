@@ -32,10 +32,10 @@ namespace cAlgo.Indicators {
     private MacdCrossOver macdH1;
     private MacdCrossOver macdM5;
 
-    private WeightedMovingAverage mmD1;
-    private WeightedMovingAverage mmH4;
-    private WeightedMovingAverage mmH1;
-    private WeightedMovingAverage mmM5;
+    private ExponentialMovingAverage mmD1;
+    private ExponentialMovingAverage mmH4;
+    private ExponentialMovingAverage mmH1;
+    private ExponentialMovingAverage mmM5;
 
     private MarketSeries seriesD1;
     private MarketSeries seriesH4;
@@ -43,9 +43,6 @@ namespace cAlgo.Indicators {
     private MarketSeries seriesM5;
 
     private AverageTrueRange atr;
-
-    //public IndicatorDataSeries Reference { get; set; }
-    //public IndicatorDataSeries Local { get; set; }
 
     protected override void Initialize() {
       if (EnableATRInfo) {
@@ -55,31 +52,29 @@ namespace cAlgo.Indicators {
       if (EnableD1) {
         seriesD1 = MarketData.GetSeries(TimeFrame.Daily);
         macdD1 = Indicators.MacdCrossOver(seriesD1.Close, 26, 12, 9);
-        mmD1 = Indicators.WeightedMovingAverage(seriesD1.Close, 300);
+        mmD1 = Indicators.ExponentialMovingAverage(seriesD1.Close, 200);
       }
 
       if (EnableH4) {
         seriesH4 = MarketData.GetSeries(TimeFrame.Hour4);
         macdH4 = Indicators.MacdCrossOver(seriesH4.Close, 26, 12, 9);
-        mmH4 = Indicators.WeightedMovingAverage(seriesH4.Close, 300);
+        mmH4 = Indicators.ExponentialMovingAverage(seriesH4.Close, 200);
       }
 
       if (EnableH1) {
         seriesH1 = MarketData.GetSeries(TimeFrame.Hour);
         macdH1 = Indicators.MacdCrossOver(seriesH1.Close, 26, 12, 9);
-        mmH1 = Indicators.WeightedMovingAverage(seriesH1.Close, 300);
+        mmH1 = Indicators.ExponentialMovingAverage(seriesH1.Close, 200);
       }
 
       if (EnableM5) {
         seriesM5 = MarketData.GetSeries(TimeFrame.Minute5);
         macdM5 = Indicators.MacdCrossOver(seriesM5.Close, 26, 12, 9);
-        mmM5 = Indicators.WeightedMovingAverage(seriesM5.Close, 300);
+        mmM5 = Indicators.ExponentialMovingAverage(seriesM5.Close, 200);
       }
     }
 
     public override void Calculate(int index) {
-      if (!IsRealTime) return;
-
       String outputHeader = "\t";
       String outputValue = "\t";
 
@@ -91,6 +86,10 @@ namespace cAlgo.Indicators {
           val = Math.Round(rval * 10000, 1);
         } else if (Symbol.PipSize == 0.01) {
           val = Math.Round(rval * 100, 1);
+        } else if (Symbol.PipSize == 0.1) {
+          val = Math.Round(rval * 10, 1);
+        } else {
+          throw new Exception("Unexpected pip size.");
         }
 
         outputValue += string.Format("{0}\t|\t", val);
@@ -128,8 +127,8 @@ namespace cAlgo.Indicators {
       ChartObjects.DrawText("timing", output , StaticPosition.TopCenter, Colors.Black);
     }
 
-    private int CalculateTiming(MacdCrossOver macd, WeightedMovingAverage wma, MarketSeries series) {
-      if (IsTrendUp(series, wma)) {
+    private int CalculateTiming(MacdCrossOver macd, ExponentialMovingAverage ma, MarketSeries series) {
+      if (IsTrendUp(series, ma)) {
         if (macd.Histogram.LastValue > 0) {
           return 1;
         } else {
@@ -144,7 +143,7 @@ namespace cAlgo.Indicators {
       }
     }
 
-    private bool IsTrendUp(MarketSeries series, WeightedMovingAverage ma) {
+    private bool IsTrendUp(MarketSeries series, ExponentialMovingAverage ma) {
       var close = series.Close.LastValue;
       var value = ma.Result.LastValue;
 
