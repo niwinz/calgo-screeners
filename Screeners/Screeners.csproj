@@ -31,5 +31,6 @@
     <Reference Include="cAlgo.API">
       <HintPath>..\..\..\..\Desktop\cAlgo.API.dll</HintPath>
     </Reference>
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
  </Project>
