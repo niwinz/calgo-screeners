@@ -23,7 +23,7 @@ namespace cAlgo {
   [Robot(TimeZone = TimeZones.WEuropeStandardTime, AccessRights = AccessRights.FullAccess)]
   public class ScreenerITD : Robot {
 
-    [Parameter("PullBack M5?", DefaultValue = true)]
+    [Parameter("PullBack M5?", DefaultValue = false)]
     public bool EnablePBM5 { get; set; }
 
     [Parameter("PullBack H1?", DefaultValue = true)]
@@ -38,10 +38,10 @@ namespace cAlgo {
     [Parameter("VCN H1?", DefaultValue = true)]
     public bool EnableVCNH1 { get; set; }
 
-    [Parameter("MX M5?", DefaultValue = false)]
+    [Parameter("MX M5?", DefaultValue = true)]
     public bool EnableMXM5 { get; set; }
 
-    [Parameter("MX H1?", DefaultValue = false)]
+    [Parameter("MX H1?", DefaultValue = true)]
     public bool EnableMXH1 { get; set; }
 
     [Parameter("MMX Periods?", DefaultValue = 12)]
@@ -58,8 +58,8 @@ namespace cAlgo {
     //public Boolean EnableSoundAlerts { get; set; }
 
     private String[] symbols = new String[] {
-      "AUDUSD",
-      "AUDCAD",
+      //"AUDUSD",
+      //"AUDCAD",
       //"AUDCHF",
       //"AUDJPY",
       //"AUDNZD",
@@ -90,19 +90,33 @@ namespace cAlgo {
       //"STOXX50",
 
       // Forex
-      //"GBPUSD",
-      //"EURUSD",
-      //"GBPAUD",
-      //"EURNZD",
-      //"NZDJPY",
-      //"USDCAD",
-      //"NZDUSD",
-      //"AUDUSD",
+
+      "AUDUSD",
+
+      "GBPAUD",
+      "GBPUSD",
+      "GBPCHF",
+
+      "CHFJPY",
+
+      "EURAUD",
+      "EURGBP",
+      "EURJPY",
+      "EURNZD",
+      "EURUSD",
+      
+      "USDCAD",
+      "USDJPY",
+
+      //"NZDUSD", // baja volatilidad
+
+      "XAUUSD",
+      "XTIUSD",
+
       // Indexes
-      //"US500",
-      //"USTEC",
-      //"DE30",
-      //"ES35",
+      "US500",
+      "USTEC",
+      "DE30",
     };
 
     private Dictionary<String, String> soundPaths;
@@ -300,16 +314,28 @@ namespace cAlgo {
         }
       }
 
+      if (EnableMXM5) {
+        foreach (string sym in symbols) {
+          var asset = state.GetAsset(sym);
+          var value = GetMXSignal(sym, TimeFrame.Minute5, asset.Timing);
+          asset.AddSignal(new Signal("MX", TimeFrame.Minute5, value));
+        }
+      }
+
+      if (EnableMXH1) {
+        foreach (string sym in symbols) {
+          var asset = state.GetAsset(sym);
+          var value = GetMXSignal(sym, TimeFrame.Hour, asset.Timing);
+          asset.AddSignal(new Signal("MX", TimeFrame.Hour, value));
+        }
+      }
+
       Render();
-      Print("Dumping json");
-      //Bus.Emit(state.ToJson());
+      Bus.Emit(state.ToJson());
 
       using (StreamWriter sw = new StreamWriter(@"C:\Users\Andrey\Desktop\json.txt")) {
         sw.Write(state.ToJson());
       }
-
-      Print("Json dumping ended");
-
     }
 
     // -------------------------------------------
@@ -391,23 +417,31 @@ namespace cAlgo {
         throw new Exception("TimeFrame not supported.");
       }
 
-      if (mm55.Result.LastValue > mm200.Result.LastValue
-          && In(timing.Get(rtf), 1, -2)
-          && In(timing.Get(ltf), 1)
+      if (macd.Histogram.Last(1) > 0
+          && macd.Histogram.Last(2) > 0
+          && macd.Histogram.Last(3) > 0
           && series.Low.Last(3) > mm8.Result.Last(3)
           && series.Low.Last(2) > mm8.Result.Last(2)
           && series.Low.Last(1) > mm8.Result.Last(1)
           && series.Low.Last(0) <= mm8.Result.Last(0)) {
-        return 1;
+        if (In(timing.Get(rtf), 1, -2)) {
+          return 2;
+        } else {
+          return 1;
+        }
       }
-      if (mm55.Result.LastValue < mm200.Result.LastValue
-          && In(timing.Get(rtf), -1, 2)
-          && In(timing.Get(ltf), -1)
-          && series.Low.Last(3) < mm8.Result.Last(3)
-          && series.Low.Last(2) < mm8.Result.Last(2)
-          && series.Low.Last(1) < mm8.Result.Last(1)
-          && series.Low.Last(0) >= mm8.Result.Last(0)) {
-        return -1;
+      if (macd.Histogram.Last(1) < 0
+          && macd.Histogram.Last(2) < 0
+          && macd.Histogram.Last(3) < 0
+          && series.High.Last(3) < mm8.Result.Last(3)
+          && series.High.Last(2) < mm8.Result.Last(2)
+          && series.High.Last(1) < mm8.Result.Last(1)
+          && series.High.Last(0) >= mm8.Result.Last(0)) {
+        if (In(timing.Get(rtf), -1, 2)) {
+          return -2;
+        } else {
+          return -1;
+        }
       }
 
       return 0;
@@ -724,9 +758,9 @@ namespace cAlgo {
         var signalsOutput = new HashSet<String>();
         foreach (var signal in asset.Signals) {
           if (signal.IsUpTrend()) {
-            signalsOutput.Add(string.Format("{0}(▲,{1})", signal.Name, signal.TimeFrame));
+            signalsOutput.Add(string.Format("{0}(▲,{1},{2})", signal.Name, signal.TimeFrame, signal.Value));
           } else {
-            signalsOutput.Add(string.Format("{0}(▼,{1})", signal.Name, signal.TimeFrame));
+            signalsOutput.Add(string.Format("{0}(▼,{1},{2})", signal.Name, signal.TimeFrame, signal.Value));
           }
         }
 

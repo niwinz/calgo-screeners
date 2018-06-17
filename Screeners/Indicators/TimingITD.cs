@@ -10,7 +10,7 @@ using cAlgo.API.Indicators;
 
 namespace cAlgo.Indicators {
   [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
-  public class Timing : Indicator {
+  public class TimingITD : Indicator {
 
     [Parameter("Enable ATR INFO?", DefaultValue = true)]
     public bool EnableATRInfo { get; set; }
@@ -32,10 +32,7 @@ namespace cAlgo.Indicators {
     private MacdCrossOver macdH1;
     private MacdCrossOver macdM5;
 
-    private ExponentialMovingAverage mmD1;
-    private ExponentialMovingAverage mmH4;
-    private ExponentialMovingAverage mmH1;
-    private ExponentialMovingAverage mmM5;
+    // 
 
     private MarketSeries seriesD1;
     private MarketSeries seriesH4;
@@ -46,31 +43,27 @@ namespace cAlgo.Indicators {
 
     protected override void Initialize() {
       if (EnableATRInfo) {
-        atr = Indicators.AverageTrueRange(14, MovingAverageType.Exponential);
+        atr = Indicators.AverageTrueRange(6, MovingAverageType.Exponential);
       }
 
       if (EnableD1) {
         seriesD1 = MarketData.GetSeries(TimeFrame.Daily);
         macdD1 = Indicators.MacdCrossOver(seriesD1.Close, 26, 12, 9);
-        mmD1 = Indicators.ExponentialMovingAverage(seriesD1.Close, 200);
       }
 
       if (EnableH4) {
         seriesH4 = MarketData.GetSeries(TimeFrame.Hour4);
         macdH4 = Indicators.MacdCrossOver(seriesH4.Close, 26, 12, 9);
-        mmH4 = Indicators.ExponentialMovingAverage(seriesH4.Close, 200);
       }
 
       if (EnableH1) {
         seriesH1 = MarketData.GetSeries(TimeFrame.Hour);
         macdH1 = Indicators.MacdCrossOver(seriesH1.Close, 26, 12, 9);
-        mmH1 = Indicators.ExponentialMovingAverage(seriesH1.Close, 200);
       }
 
       if (EnableM5) {
         seriesM5 = MarketData.GetSeries(TimeFrame.Minute5);
         macdM5 = Indicators.MacdCrossOver(seriesM5.Close, 26, 12, 9);
-        mmM5 = Indicators.ExponentialMovingAverage(seriesM5.Close, 200);
       }
     }
 
@@ -97,26 +90,26 @@ namespace cAlgo.Indicators {
       }
 
       if (EnableD1) {
-        var value = CalculateTiming(macdD1, mmD1, seriesD1);
+        var value = CalculateTiming(macdD1);
+        outputValue += string.Format("{0}\t", value > 0 ? "▲" : " ▼");
         outputHeader += string.Format("D1\t");
-        outputValue += string.Format("{0}({1})\t", TimingToArrow(value), value);
-      }
 
+      }
       if (EnableH4) {
-        var value = CalculateTiming(macdH4, mmH4, seriesH4);
+        var value = CalculateTiming(macdH4);
+        outputValue += string.Format("{0}\t", value > 0 ? "▲" : " ▼");
         outputHeader += string.Format("H4\t");
-        outputValue += string.Format("{0}({1})\t", TimingToArrow(value), value);
       }
 
       if (EnableH1) {
-        var value = CalculateTiming(macdH1, mmH1, seriesH1);
-        outputValue += string.Format("{0}({1})\t", TimingToArrow(value), value);
+        var value = CalculateTiming(macdH1);
+        outputValue += string.Format("{0}\t", value > 0 ? "▲" : " ▼");
         outputHeader += string.Format("H1\t");
       }
 
       if (EnableM5) {
-        var value = CalculateTiming(macdM5, mmM5, seriesM5);
-        outputValue += string.Format("{0}({1})\t", TimingToArrow(value), value);
+        var value = CalculateTiming(macdM5);
+        outputValue += string.Format("{0}\t", value > 0 ? "▲" : " ▼");
         outputHeader += string.Format("M5\t");
 
       }
@@ -127,38 +120,11 @@ namespace cAlgo.Indicators {
       ChartObjects.DrawText("timing", output , StaticPosition.TopCenter, Colors.Black);
     }
 
-    private int CalculateTiming(MacdCrossOver macd, ExponentialMovingAverage ma, MarketSeries series) {
-      if (IsTrendUp(series, ma)) {
-        if (macd.Histogram.LastValue > 0) {
-          return 1;
-        } else {
-          return 2;
-        }
+    private int CalculateTiming(MacdCrossOver macd) {
+      if (macd.Histogram.LastValue > 0) {
+        return 1;
       } else {
-        if (macd.Histogram.LastValue <= 0) {
-          return -1;
-        }  else {
-          return -2;
-        }
-      }
-    }
-
-    private bool IsTrendUp(MarketSeries series, ExponentialMovingAverage ma) {
-      var close = series.Close.LastValue;
-      var value = ma.Result.LastValue;
-
-      if (value < close) {
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    private string TimingToArrow(int timing) {
-      if (timing == 1 || timing == -2) {
-        return "▲";
-      } else {
-        return "▼";
+        return -1;
       }
     }
   }
